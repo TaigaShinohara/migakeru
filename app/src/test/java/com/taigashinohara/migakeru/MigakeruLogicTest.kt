@@ -132,6 +132,19 @@ class MigakeruLogicTest {
         val next = MigakeruLogic.swapCandidate(Item.MITAME, setOf("nails"), emptySet(), 0)
         assertTrue(next != null && next.id != "nails" && next.pillar == Item.MITAME)
     }
+
+    @Test
+    fun greetingCoversAllHoursByTimeOfDay() {
+        assertEquals("おはよう！今日も整えていこう！", MigakeruLogic.greetingForHour(5))
+        assertEquals("おはよう！今日も整えていこう！", MigakeruLogic.greetingForHour(10))
+        assertEquals("こんにちは！調子はどうだい？", MigakeruLogic.greetingForHour(11))
+        assertEquals("こんにちは！調子はどうだい？", MigakeruLogic.greetingForHour(16))
+        assertEquals("おつかれさま！今日もよくやってる！", MigakeruLogic.greetingForHour(17))
+        assertEquals("おつかれさま！今日もよくやってる！", MigakeruLogic.greetingForHour(22))
+        assertEquals("夜だな。無理せずいこう。おつかれさま！", MigakeruLogic.greetingForHour(23))
+        assertEquals("夜だな。無理せずいこう。おつかれさま！", MigakeruLogic.greetingForHour(0))
+        assertEquals("夜だな。無理せずいこう。おつかれさま！", MigakeruLogic.greetingForHour(4))
+    }
 }
 
 // v0.1.1: design v0.2 §5.3 pool completeness (mitame must have all 5 items).

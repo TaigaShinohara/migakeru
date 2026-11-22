@@ -110,4 +110,15 @@ object MigakeruLogic {
     /** Graduation (design v0.4 §4): 5 completions within the last 21 days. */
     fun isGraduationReady(completionDates: List<LocalDate>, today: LocalDate): Boolean =
         countInWindow(completionDates, today) >= GRADUATION_THRESHOLD
+
+    /**
+     * Buddy greeting (v0.4.0): the flame buddy only greets for now.
+     * Hot-blooded but never pushy — energy without pressure.
+     */
+    fun greetingForHour(hour: Int): String = when (hour) {
+        in 5..10 -> "おはよう！今日も整えていこう！"
+        in 11..16 -> "こんにちは！調子はどうだい？"
+        in 17..22 -> "おつかれさま！今日もよくやってる！"
+        else -> "夜だな。無理せずいこう。おつかれさま！"
+    }
 }

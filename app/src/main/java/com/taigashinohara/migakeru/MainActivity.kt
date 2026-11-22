@@ -27,7 +27,10 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
 /**
- * Migakeru v0.2.0 — strict UX review fixes K1–K5 (docs/UX_REVIEW_v0.1.2.md):
+ * Migakeru v0.4.0 — hot-blooded flame buddy at the top-right of the today
+ * screen, with a speech bubble that shows a time-of-day greeting
+ * (BuddyView.kt; greetings only for now).
+ * v0.2.0 — strict UX review fixes K1–K5 (docs/UX_REVIEW_v0.1.2.md):
  * graduation threshold 5/21d (reachable), graduation signal on the today
  * screen, mirror week navigation + past journals, first-run intro card,
  * and a swap button that names its target and destination.
@@ -770,8 +773,25 @@ class MainActivity : Activity() {
         val today = LocalDate.now()
         val picks = todayPicks(today)
         return scrollPage { page ->
+            // v0.4.0: hot-blooded buddy at the top-right; bubble on its left.
+            // For now the buddy only greets (time-of-day greeting).
+            val greeting = MigakeruLogic.greetingForHour(java.time.LocalTime.now().hour)
+            val buddyRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                contentDescription = "応援キャラの挨拶：$greeting"
+            }
+            val bubble = label(greeting, 15f, ink, bold = true).apply {
+                background = card()
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+            }
+            buddyRow.addView(bubble, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            buddyRow.addView(BubbleTailView(this), LinearLayout.LayoutParams(dp(12), dp(24)))
+            buddyRow.addView(FlameFaceView(this), LinearLayout.LayoutParams(dp(76), dp(76)))
+            page.addView(buddyRow, fullLp(0))
+
             val dow = "月火水木金土日"[today.dayOfWeek.value - 1]
-            page.addView(label("${today.monthValue}月${today.dayOfMonth}日（$dow）・昨日より少し好きになる", 13f, paleBlue))
+            page.addView(label("${today.monthValue}月${today.dayOfMonth}日（$dow）・昨日より少し好きになる", 13f, paleBlue), fullLp(8))
             page.addView(label("今日の3つ", 26f, white, bold = true))
 
             // K4: minimal first-run intro (one card, dismissed once, no wizard).
