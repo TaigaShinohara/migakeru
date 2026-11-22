@@ -98,10 +98,69 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!prefs.getBoolean("ob_done", false)) {
-            showOnboarding()
-        } else {
-            showMain()
+        try {
+            if (!prefs.getBoolean("ob_done", false)) {
+                showOnboarding()
+            } else {
+                showMain()
+            }
+        } catch (t: Throwable) {
+            showError(t)
+        }
+    }
+
+    /** v0.4.1 diagnostic: a startup failure must be visible, never a blank screen. */
+    private fun showError(t: Throwable) {
+        val root = FrameLayout(this)
+        root.addView(backgroundLayer(), FrameLayout.LayoutParams(-1, -1))
+        val tv = TextView(this).apply {
+            text = "起動エラーが出たよ。直すから、この画面のまま教えて。\n\n" +
+                "${t.javaClass.name}\n${t.message}\n\n" +
+                t.stackTraceToString().lineSequence().take(14).joinToString("\n")
+            setTextColor(white)
+            textSize = 13f
+            setPadding(dp(20), dp(48), dp(20), dp(20))
+        }
+        root.addView(tv, FrameLayout.LayoutParams(-1, -1))
+        setContentView(root)
+    }
+
+    /**
+     * v0.4.1 diagnostic: after the first layout pass, verify the main column
+     * actually measured. If the content area collapsed, draw the measured
+     * numbers as an overlay on the root (the root demonstrably paints).
+     */
+    private fun selfCheck(root: FrameLayout, mode: String) {
+        root.post {
+            val info = StringBuilder("診断モード: $mode")
+            var broken = false
+            try {
+                info.append(" / ob_done=${prefs.getBoolean("ob_done", false)}")
+                info.append(" / root=${root.width}x${root.height}")
+                if (mode == "main") {
+                    info.append(" / content=${content.width}x${content.height} 子=${content.childCount}")
+                    val sv = content.getChildAt(0) as? ScrollView
+                    val page = sv?.getChildAt(0) as? LinearLayout
+                    info.append(" / sv=${sv?.width}x${sv?.height} page=${page?.width}x${page?.height} page子=${page?.childCount}")
+                    if (content.height == 0 || page == null || page.childCount == 0 || page.height == 0) broken = true
+                } else {
+                    info.append(" / ob子=${obContainer.childCount} ob=${obContainer.width}x${obContainer.height}")
+                    if (obContainer.height == 0 || obContainer.childCount == 0) broken = true
+                }
+            } catch (t: Throwable) {
+                info.append(" / 診断中の例外: ${t.javaClass.simpleName}: ${t.message}")
+                broken = true
+            }
+            if (broken) {
+                val tv = TextView(this).apply {
+                    text = info.toString()
+                    setTextColor(white)
+                    textSize = 13f
+                    setBackgroundColor(Color.argb(200, 0, 0, 0))
+                    setPadding(dp(16), dp(40), dp(16), dp(16))
+                }
+                root.addView(tv, FrameLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
+            }
         }
     }
 
@@ -139,9 +198,10 @@ class MainActivity : Activity() {
             tabBar.addView(it, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
         column.addView(tabBar, barLp)
-        root.addView(column)
+        root.addView(column, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         showScreen(0)
+        selfCheck(root, "main")
     }
 
     /** Standard base: navy gradient + blurred brand lights (approximation). */
@@ -398,9 +458,10 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, dp(20))
         }
         column.addView(obDots)
-        root.addView(column)
+        root.addView(column, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
         renderObPage(0)
+        selfCheck(root, "ob")
     }
 
     private fun renderObPage(idx: Int) {
