@@ -168,9 +168,15 @@ class MainActivity : Activity() {
         val root = FrameLayout(this)
         root.addView(backgroundLayer(), FrameLayout.LayoutParams(-1, -1))
 
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        // v0.4.2: no LinearLayout weight for the content area. The v0.4.1
+        // on-device diagnostic showed the weight-1 child measuring 0 high
+        // (blank screen) on the user's Pixel, so the layout is now pure
+        // FrameLayout layering — the mechanism that demonstrably paints
+        // (background, overlays). The tab bar overlays the bottom and the
+        // content keeps clear of it via bottom padding.
         content = FrameLayout(this)
-        column.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        content.setPadding(0, 0, 0, dp(92))
+        root.addView(content, FrameLayout.LayoutParams(-1, -1))
 
         // Tab bar: one reading-glass surface (dark-side tint), floating.
         val tabBar = LinearLayout(this).apply {
@@ -184,8 +190,10 @@ class MainActivity : Activity() {
             }
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
-        val barLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-        barLp.setMargins(dp(12), dp(8), dp(12), dp(12))
+        val barLp = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM,
+        )
+        barLp.setMargins(dp(12), 0, dp(12), dp(12))
         val names = listOf("今日", "鏡", "図鑑", "わたし")
         tabButtons = names.mapIndexed { i, name ->
             Button(this).apply {
@@ -197,8 +205,7 @@ class MainActivity : Activity() {
         tabButtons.forEach {
             tabBar.addView(it, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        column.addView(tabBar, barLp)
-        root.addView(column, FrameLayout.LayoutParams(-1, -1))
+        root.addView(tabBar, barLp)
         setContentView(root)
         showScreen(0)
         selfCheck(root, "main")
@@ -407,6 +414,7 @@ class MainActivity : Activity() {
                 2 -> guideScreen()
                 else -> meScreen()
             },
+            FrameLayout.LayoutParams(-1, -1),
         )
     }
 
@@ -429,7 +437,8 @@ class MainActivity : Activity() {
     private fun showOnboarding() {
         val root = FrameLayout(this)
         root.addView(backgroundLayer(), FrameLayout.LayoutParams(-1, -1))
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        // v0.4.2: same FrameLayout layering as showMain (no weight child) —
+        // the onboarding container was the one measured 0 high on-device.
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(12), dp(12), dp(12), 0)
@@ -449,16 +458,16 @@ class MainActivity : Activity() {
             setOnClickListener { finishOnboarding() }
         }
         top.addView(obSkipBtn)
-        column.addView(top)
         obContainer = FrameLayout(this)
-        column.addView(obContainer, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        obContainer.setPadding(0, dp(60), 0, dp(56))
+        root.addView(obContainer, FrameLayout.LayoutParams(-1, -1))
+        root.addView(top, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
         obDots = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, dp(20))
         }
-        column.addView(obDots)
-        root.addView(column, FrameLayout.LayoutParams(-1, -1))
+        root.addView(obDots, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
         setContentView(root)
         renderObPage(0)
         selfCheck(root, "ob")
@@ -480,7 +489,7 @@ class MainActivity : Activity() {
             if (pendingAdvance != null) firePendingAdvance()
         }
         obContainer.removeAllViews()
-        obContainer.addView(scroll)
+        obContainer.addView(scroll, FrameLayout.LayoutParams(-1, -1))
         // Staggered entry: headline -> visual -> the rest.
         for (i in 0 until page.childCount) {
             val child = page.getChildAt(i)
