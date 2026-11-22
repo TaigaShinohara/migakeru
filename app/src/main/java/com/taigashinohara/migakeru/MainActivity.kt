@@ -14,6 +14,7 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
@@ -109,6 +110,19 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * v0.4.3: edge-to-edge draws under the status bar, so the top content
+     * (buddy row first) got clipped. Push the given view's content down by
+     * the system-bar inset, on top of its base top padding.
+     */
+    private fun applyTopInset(view: View, baseTopDp: Int, bottomDp: Int) {
+        view.setOnApplyWindowInsetsListener { v, insets ->
+            val bars = insets.getInsets(WindowInsets.Type.systemBars())
+            v.setPadding(bars.left, dp(baseTopDp) + bars.top, bars.right, dp(bottomDp))
+            insets
+        }
+    }
+
     /** v0.4.1 diagnostic: a startup failure must be visible, never a blank screen. */
     private fun showError(t: Throwable) {
         val root = FrameLayout(this)
@@ -176,6 +190,7 @@ class MainActivity : Activity() {
         // content keeps clear of it via bottom padding.
         content = FrameLayout(this)
         content.setPadding(0, 0, 0, dp(92))
+        applyTopInset(content, 0, 92)
         root.addView(content, FrameLayout.LayoutParams(-1, -1))
 
         // Tab bar: one reading-glass surface (dark-side tint), floating.
@@ -442,6 +457,11 @@ class MainActivity : Activity() {
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(12), dp(12), dp(12), 0)
+            setOnApplyWindowInsetsListener { v, insets ->
+                val bars = insets.getInsets(WindowInsets.Type.systemBars())
+                v.setPadding(dp(12), dp(12) + bars.top, dp(12), 0)
+                insets
+            }
         }
         fun topBtn(text: String) = Button(this).apply {
             this.text = text
@@ -460,6 +480,7 @@ class MainActivity : Activity() {
         top.addView(obSkipBtn)
         obContainer = FrameLayout(this)
         obContainer.setPadding(0, dp(60), 0, dp(56))
+        applyTopInset(obContainer, 60, 56)
         root.addView(obContainer, FrameLayout.LayoutParams(-1, -1))
         root.addView(top, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
         obDots = LinearLayout(this).apply {
