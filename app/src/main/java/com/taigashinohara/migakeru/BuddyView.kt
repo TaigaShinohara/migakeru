@@ -143,9 +143,15 @@ class FlameFaceView(context: Context) : View(context) {
 
 /** Small triangle tail for the speech bubble, pointing right toward the buddy. */
 class BubbleTailView(context: Context) : View(context) {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(150, 255, 255, 255)
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(34, 255, 255, 255)
         style = Paint.Style.FILL
+    }
+    private val edgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.argb(120, 0xD4, 0xAF, 0x37)
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f
+        strokeCap = Paint.Cap.ROUND
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -156,6 +162,9 @@ class BubbleTailView(context: Context) : View(context) {
             lineTo(0f, height * 0.82f)
             close()
         }
-        canvas.drawPath(path, paint)
+        canvas.drawPath(path, fillPaint)
+        // Gold edges on the two slanted sides only (the base hides in the bubble).
+        canvas.drawLine(0f, height * 0.18f, width.toFloat(), height * 0.5f, edgePaint)
+        canvas.drawLine(width.toFloat(), height * 0.5f, 0f, height * 0.82f, edgePaint)
     }
 }

@@ -28,7 +28,12 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
 /**
- * Migakeru v0.4.0 — hot-blooded flame buddy at the top-right of the today
+ * Migakeru v0.5.0 — design overhaul to 黒×金×炎 design A (user's pick from
+ * the 6-variant board, 2026-11-22): black base, dark glass cards with gold
+ * edges, gold selected-tab pill, flame orange kept as the point colour
+ * (buddy, primary buttons, completion marks). Simple Glass material rules
+ * stay; the navy base and light glass of v0.1.2–v0.4.x are retired.
+ * v0.4.0 — hot-blooded flame buddy at the top-right of the today
  * screen, with a speech bubble that shows a time-of-day greeting
  * (BuddyView.kt; greetings only for now).
  * v0.2.0 — strict UX review fixes K1–K5 (docs/UX_REVIEW_v0.1.2.md):
@@ -36,15 +41,15 @@ import java.time.temporal.TemporalAdjusters
  * screen, mirror week navigation + past journals, first-run intro card,
  * and a swap button that names its target and destination.
  * v0.1.2 — Simple Glass applied (docs/GLASS_REVIEW_v0.1.1.md).
- * Tokens (Simple Glass canonical, ART_DIRECTION roles unchanged):
- * - Base: navy gradient + 3 blurred lights (radial-gradient ovals, plain-View
- *   approximation of the standard template: hero tint top-left, steel bottom-right,
- *   pale centre-bottom).
- * - Reading glass on cards: white 62% -> 54% top-to-bottom, top edge white 75%.
- *   On-card sub text is #2E2A26 (not canonical #554D44): over the navy base the
- *   blended surface luminance only leaves ~3.0:1 for #554D44, and the contrast
- *   gate (4.5:1) outranks the colour token. Recorded in the review doc.
- * - Input surface: white 86% -> 82%, focus edge turns orange.
+ * Tokens (v0.5.0, ART_DIRECTION v0.2):
+ * - Base: near-black gradient (#121216 -> #070708) + 2 blurred lights
+ *   (gold top-left, flame bottom-right; ART_DIRECTION caps lights at 2).
+ * - Reading glass on cards (dark side): white 14% -> 10%, gold edge 40%
+ *   (done cards: warm wash + gold edge 59%). Main text #F4F1E8, on-card
+ *   sub #D8CFC2 (Simple Glass canonical dark sub), on-base sub #A79E8A.
+ * - Chips and the selected tab are gold; completion marks and primary
+ *   buttons stay flame orange — gold decorates, flame acts.
+ * - Input surface: dark glass, focus edge turns orange.
  * - Type scale: 26 / 17 / 15 / 13 only. Line spacing 1.6.
  * - Spacing scale: 4 / 8 / 12 / 16 / 24 / 32 (screen side margin 20 per quality.md).
  * - Press feedback: views dip to alpha .82 while touched.
@@ -52,14 +57,22 @@ import java.time.temporal.TemporalAdjusters
  */
 class MainActivity : Activity() {
 
-    private val navy = Color.rgb(0x0E, 0x22, 0x33)
-    private val navyLight = Color.rgb(0x16, 0x32, 0x4A)
+    // v0.5.0 palette — 黒×金×炎, design A (user's pick, 2026-11-22):
+    // black base, dark glass with gold edges, flame orange as the point
+    // colour. Variable names keep their old roles (ink = main text on
+    // glass, paleBlue = sub text on the base) so call sites stay put.
+    private val navy = Color.rgb(0x07, 0x07, 0x08)
+    private val navyLight = Color.rgb(0x12, 0x12, 0x16)
     private val orange = Color.rgb(0xE6, 0x51, 0x00)
     private val orangeHi = Color.rgb(0xEB, 0x6A, 0x1F)
     private val orangeLo = Color.rgb(0xDC, 0x4E, 0x00)
-    private val ink = Color.rgb(0x1B, 0x2A, 0x36)
-    private val subOnGlass = Color.rgb(0x2E, 0x2A, 0x26)
-    private val paleBlue = Color.rgb(0xBC, 0xD4, 0xE4)
+    private val gold = Color.rgb(0xD4, 0xAF, 0x37)
+    private val goldHi = Color.rgb(0xF5, 0xD6, 0x7B)
+    private val goldText = Color.rgb(0xE9, 0xC7, 0x66)
+    private val goldDark = Color.rgb(0x17, 0x11, 0x06)
+    private val ink = Color.rgb(0xF4, 0xF1, 0xE8)
+    private val subOnGlass = Color.rgb(0xD8, 0xCF, 0xC2)
+    private val paleBlue = Color.rgb(0xA7, 0x9E, 0x8A)
     private val white = Color.WHITE
 
     private lateinit var content: FrameLayout
@@ -198,10 +211,10 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(Color.argb(64, 255, 255, 255), Color.argb(46, 255, 255, 255)),
+                intArrayOf(Color.argb(26, 255, 255, 255), Color.argb(18, 255, 255, 255)),
             ).apply {
                 cornerRadius = dp(28).toFloat()
-                setStroke(dp(1), Color.argb(97, 255, 255, 255))
+                setStroke(dp(1), Color.argb(89, 0xD4, 0xAF, 0x37))
             }
             setPadding(dp(8), dp(8), dp(8), dp(8))
         }
@@ -246,11 +259,11 @@ class MainActivity : Activity() {
             v.layoutParams = lp
             return v
         }
-        // Hero light: warm orange tint, top-left, bleeding off-screen.
-        layer.addView(blob(Color.argb(58, 0xE6, 0x8C, 0x4A), 340, Gravity.TOP or Gravity.START, -120, -100))
-        // Second light: steel blue, bottom-right. (ART_DIRECTION caps brand
-        // lights at 2; the v0.1.2 third light was a review miss, removed in v0.2.)
-        layer.addView(blob(Color.argb(80, 0x5A, 0x96, 0xBE), 360, Gravity.BOTTOM or Gravity.END, -110, -90))
+        // Hero light: gold tint, top-left, bleeding off-screen.
+        layer.addView(blob(Color.argb(52, 0xD4, 0xAF, 0x37), 340, Gravity.TOP or Gravity.START, -120, -100))
+        // Second light: flame orange, bottom-right. (ART_DIRECTION caps
+        // brand lights at 2.)
+        layer.addView(blob(Color.argb(56, 0xFF, 0x6A, 0x00), 360, Gravity.BOTTOM or Gravity.END, -110, -90))
         return layer
     }
 
@@ -300,23 +313,23 @@ class MainActivity : Activity() {
 
     // ---------- shared UI helpers ----------
 
-    /** Reading glass: white 62% -> 54%, top edge at 75% white. */
+    /** Reading glass, dark side (v0.5.0): white 14% -> 10%, gold edge 40%. */
     private fun card(done: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
-        if (done) intArrayOf(Color.argb(205, 0xFF, 0xED, 0xD9), Color.argb(188, 0xFF, 0xE2, 0xC4))
-        else intArrayOf(Color.argb(158, 255, 255, 255), Color.argb(138, 255, 255, 255)),
+        if (done) intArrayOf(Color.argb(48, 0xFF, 0xED, 0xD9), Color.argb(36, 0xFF, 0xE2, 0xC4))
+        else intArrayOf(Color.argb(36, 255, 255, 255), Color.argb(26, 255, 255, 255)),
     ).apply {
         cornerRadius = dp(24).toFloat()
-        setStroke(dp(1), Color.argb(190, 255, 255, 255))
+        setStroke(dp(1), Color.argb(if (done) 150 else 102, 0xD4, 0xAF, 0x37))
     }
 
-    /** Input surface: white 86% -> 82%; focus edge is set by the caller. */
+    /** Input surface, dark glass; focus edge is set by the caller. */
     private fun inputSurface(focused: Boolean): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Color.argb(219, 255, 255, 255), Color.argb(209, 255, 255, 255)),
+        intArrayOf(Color.argb(36, 255, 255, 255), Color.argb(26, 255, 255, 255)),
     ).apply {
         cornerRadius = dp(24).toFloat()
-        if (focused) setStroke(dp(2), orange) else setStroke(dp(1), Color.argb(190, 255, 255, 255))
+        if (focused) setStroke(dp(2), orange) else setStroke(dp(1), Color.argb(90, 255, 255, 255))
     }
 
     /** Press state: dip alpha while touched (quality.md state completeness). */
@@ -349,26 +362,26 @@ class MainActivity : Activity() {
         setTextColor(white)
         background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.argb(56, 255, 255, 255), Color.argb(40, 255, 255, 255)),
+            intArrayOf(Color.argb(20, 255, 255, 255), Color.argb(14, 255, 255, 255)),
         ).apply {
             cornerRadius = dp(24).toFloat()
-            setStroke(dp(1), Color.argb(120, 255, 255, 255))
+            setStroke(dp(1), Color.argb(110, 255, 255, 255))
         }
         pressable(this)
         setOnClickListener { onClick() }
     }
 
-    /** Small light button for use ON a glass card (the 戻す action). */
+    /** Small gold-tinted button for use ON a glass card (the 戻す action). */
     private fun lightButton(text: String, onClick: () -> Unit) = Button(this).apply {
         this.text = text
         textSize = 15f
-        setTextColor(ink)
+        setTextColor(goldText)
         background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(Color.argb(219, 255, 255, 255), Color.argb(209, 255, 255, 255)),
+            intArrayOf(Color.argb(46, 0xD4, 0xAF, 0x37), Color.argb(34, 0xD4, 0xAF, 0x37)),
         ).apply {
             cornerRadius = dp(24).toFloat()
-            setStroke(dp(1), Color.argb(190, 255, 255, 255))
+            setStroke(dp(1), Color.argb(120, 0xD4, 0xAF, 0x37))
         }
         pressable(this)
         setOnClickListener { onClick() }
@@ -385,11 +398,12 @@ class MainActivity : Activity() {
     private fun pillarChip(pillar: String) = TextView(this).apply {
         text = pillar
         textSize = 13f
-        setTextColor(ink)
+        setTextColor(goldText)
         typeface = Typeface.DEFAULT_BOLD
         background = GradientDrawable().apply {
-            setColor(Color.rgb(0xE0, 0xF2, 0xFB))
+            setColor(Color.argb(41, 0xD4, 0xAF, 0x37))
             cornerRadius = dp(12).toFloat()
+            setStroke(dp(1), Color.argb(110, 0xD4, 0xAF, 0x37))
         }
         setPadding(dp(8), dp(4), dp(8), dp(4))
     }
@@ -413,11 +427,13 @@ class MainActivity : Activity() {
         tabButtons.forEachIndexed { i, b ->
             val selected = i == index
             b.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-            // Selected = white pill + ink bold (shape + weight, not colour alone;
-            // orange text on white would fall under the 4.5:1 gate).
-            b.setTextColor(if (selected) ink else paleBlue)
-            b.background = GradientDrawable().apply {
-                setColor(if (selected) Color.argb(235, 255, 255, 255) else Color.TRANSPARENT)
+            // Selected = gold gradient pill + near-black bold text (design A).
+            b.setTextColor(if (selected) goldDark else Color.rgb(0xBD, 0xBD, 0xC6))
+            b.background = if (selected) GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(goldHi, gold),
+            ).apply { cornerRadius = dp(24).toFloat() } else GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
                 cornerRadius = dp(24).toFloat()
             }
         }
@@ -534,7 +550,7 @@ class MainActivity : Activity() {
             val dot = View(this).apply {
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(if (i == obPage) white else Color.argb(90, 255, 255, 255))
+                    setColor(if (i == obPage) goldText else Color.argb(80, 0xD4, 0xAF, 0x37))
                 }
             }
             val lp = LinearLayout.LayoutParams(dp(size), dp(size))
@@ -618,14 +634,14 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(12), dp(16), dp(12))
         }
         val mark = TextView(this).apply {
-            text = if (doneMark) "✓" else "●"
+            text = if (doneMark) "✓" else ""
             textSize = 15f
             gravity = Gravity.CENTER
-            setTextColor(if (doneMark) white else Color.rgb(0x8A, 0x99, 0xA6))
+            setTextColor(white)
             if (doneMark) typeface = Typeface.DEFAULT_BOLD
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                if (doneMark) setColor(orange) else setColor(Color.TRANSPARENT)
+                if (doneMark) setColor(orange) else setStroke(dp(2), Color.argb(170, 0xD4, 0xAF, 0x37))
             }
             layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
         }
@@ -654,8 +670,8 @@ class MainActivity : Activity() {
                     gravity = Gravity.CENTER
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
-                        setStroke(dp(2), Color.argb(160, 255, 255, 255))
-                        setColor(Color.argb(30, 255, 255, 255))
+                        setStroke(dp(2), Color.argb(170, 0xD4, 0xAF, 0x37))
+                        setColor(Color.argb(26, 0xD4, 0xAF, 0x37))
                     }
                 }
                 val lp = LinearLayout.LayoutParams(dp(140), dp(140))
@@ -717,7 +733,7 @@ class MainActivity : Activity() {
                 page.addView(label("できなかった日は、持ち越さない。", 26f, white, bold = true))
                 page.addView(label("昨日の分が、今日に積まれることはない。", 15f, paleBlue), fullLp(8))
                 page.addView(label("昨日", 13f, paleBlue), fullLp(24))
-                page.addView(label("○ ○ ○", 17f, Color.argb(120, 255, 255, 255)))
+                page.addView(label("○ ○ ○", 17f, Color.argb(140, 0xD4, 0xAF, 0x37)))
                 page.addView(label("今日", 13f, paleBlue), fullLp(16))
                 page.addView(label("● ○ ○", 17f, orange))
                 page.addView(primaryButton("次へ") { renderObPage(5) }, fullLp(32))
@@ -770,14 +786,14 @@ class MainActivity : Activity() {
                 if (isDone(item.id, today)) trialDoneNow = true
                 // Built inline (not miniRow) so the mark can flip in place.
                 val mark = TextView(this).apply {
-                    text = if (trialDoneNow) "✓" else "●"
+                    text = if (trialDoneNow) "✓" else ""
                     textSize = 15f
                     gravity = Gravity.CENTER
-                    setTextColor(if (trialDoneNow) white else Color.rgb(0x8A, 0x99, 0xA6))
+                    setTextColor(white)
                     if (trialDoneNow) typeface = Typeface.DEFAULT_BOLD
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
-                        if (trialDoneNow) setColor(orange) else setColor(Color.TRANSPARENT)
+                        if (trialDoneNow) setColor(orange) else setStroke(dp(2), Color.argb(170, 0xD4, 0xAF, 0x37))
                     }
                     layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
                 }
@@ -834,7 +850,7 @@ class MainActivity : Activity() {
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
                         setColor(orange)
-                        setStroke(dp(3), Color.argb(160, 255, 255, 255))
+                        setStroke(dp(3), Color.argb(190, 0xF5, 0xD6, 0x7B))
                     }
                 }
                 val lp = LinearLayout.LayoutParams(dp(120), dp(120))
@@ -913,14 +929,14 @@ class MainActivity : Activity() {
                     contentDescription = if (done) "完了：${item.label}" else "未完了：${item.label}"
                 }
                 val mark = TextView(this).apply {
-                    text = if (done) "✓" else "●"
-                    textSize = if (done) 15f else 17f
+                    text = if (done) "✓" else ""
+                    textSize = 15f
                     gravity = Gravity.CENTER
-                    setTextColor(if (done) white else Color.rgb(0x8A, 0x99, 0xA6))
+                    setTextColor(white)
                     if (done) typeface = Typeface.DEFAULT_BOLD
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
-                        if (done) setColor(orange) else setColor(Color.TRANSPARENT)
+                        if (done) setColor(orange) else setStroke(dp(2), Color.argb(170, 0xD4, 0xAF, 0x37))
                     }
                     layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
                 }
@@ -1118,6 +1134,7 @@ class MainActivity : Activity() {
                     textSize = 15f
                     setText(savedJournal)
                     setTextColor(ink)
+                    setHintTextColor(subOnGlass)
                     background = inputSurface(false)
                     setPadding(dp(16), dp(12), dp(16), dp(12))
                     setOnFocusChangeListener { v, hasFocus -> v.background = inputSurface(hasFocus) }
@@ -1239,6 +1256,6 @@ class MainActivity : Activity() {
                 }
                 .show()
         }, fullLp(24))
-        page.addView(label("ミガケル v0.3.0", 13f, paleBlue), fullLp(12))
+        page.addView(label("ミガケル v0.5.0", 13f, paleBlue), fullLp(12))
     }
 }

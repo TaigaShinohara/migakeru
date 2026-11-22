@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#17171b; font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif; color:#eee; }
+  .board { width:1560px; margin:0 auto; padding:44px 40px 30px; }
+  h1 { font-size:34px; letter-spacing:.06em; }
+  h1 .gold { background:linear-gradient(90deg,#f5d67b,#d4af37 55%,#ff7a1a); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .sub { color:#a9a9b3; font-size:16px; margin-top:8px; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:34px 30px; margin-top:34px; }
+  .cell .cap { margin-top:14px; }
+  .cap .name { font-size:21px; font-weight:700; }
+  .cap .name .no { display:inline-block; background:linear-gradient(135deg,#f5d67b,#d4af37); color:#111; border-radius:8px; padding:1px 10px; margin-right:8px; font-size:19px; }
+  .cap .rec { display:inline-block; background:linear-gradient(90deg,#ff7a1a,#e65100); color:#fff; border-radius:999px; padding:2px 10px; font-size:13px; font-weight:700; margin-left:8px; vertical-align:2px; }
+  .cap p { color:#a9a9b3; font-size:14.5px; margin-top:5px; line-height:1.55; }
+
+  /* ---------- phone frame ---------- */
+  .phone { width:470px; height:900px; border-radius:44px; padding:14px; background:#000; border:2px solid #33343c; box-shadow:0 18px 44px rgba(0,0,0,.55); }
+  .scr { position:relative; width:100%; height:100%; border-radius:32px; overflow:hidden; padding:20px 22px 16px; display:flex; flex-direction:column; }
+  .status { display:flex; justify-content:space-between; font-size:13px; color:#cfcfd6; padding:0 6px 12px; }
+  .buddy { display:flex; align-items:center; gap:2px; }
+  .bubble { flex:1; border-radius:18px; padding:13px 16px; font-size:16.5px; font-weight:700; line-height:1.5; position:relative; }
+  .tail { width:0; height:0; border-top:9px solid transparent; border-bottom:9px solid transparent; }
+  .flame { width:74px; height:74px; flex:none; }
+  .date { font-size:13.5px; margin-top:16px; }
+  .title { font-size:31px; font-weight:800; margin-top:3px; letter-spacing:.02em; }
+  .cards { margin-top:18px; display:flex; flex-direction:column; gap:13px; }
+  .card { border-radius:22px; padding:16px 18px 15px; display:flex; align-items:center; gap:13px; }
+  .dot { width:30px; height:30px; flex:none; border-radius:50%; }
+  .chip { display:inline-block; font-size:12.5px; font-weight:700; border-radius:999px; padding:2px 10px; margin-bottom:5px; }
+  .task { font-size:18.5px; font-weight:700; }
+  .swap { margin-top:15px; text-align:center; border-radius:18px; padding:12px 8px; font-size:14.5px; }
+  .foot { margin-top:13px; font-size:14.5px; }
+  .sp { flex:1; }
+  .tabs { border-radius:26px; padding:9px; display:flex; }
+  .tab { flex:1; text-align:center; font-size:15.5px; padding:9px 0; border-radius:19px; }
+  .glass { backdrop-filter:blur(6px); }
+
+  /* ---------- A 黒金ベーシック ---------- */
+  .vA .scr { background:radial-gradient(600px 340px at 12% -6%, rgba(212,175,55,.14), transparent 60%), radial-gradient(560px 380px at 105% 108%, rgba(255,106,0,.10), transparent 60%), linear-gradient(180deg,#101014,#08080a); }
+  .vA .bubble { background:rgba(255,255,255,.07); border:1px solid rgba(212,175,55,.55); color:#f5ecd2; box-shadow:inset 0 1px 0 rgba(255,255,255,.25); }
+  .vA .tail { border-left:13px solid rgba(212,175,55,.55); }
+  .vA .date { color:#b9a86a; }
+  .vA .title { color:#fff; } .vA .title b { color:#e9c766; }
+  .vA .card { background:linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,.05)); border:1px solid rgba(212,175,55,.4); box-shadow:inset 0 1px 0 rgba(255,255,255,.22); }
+  .vA .dot { border:2px solid rgba(233,199,102,.75); }
+  .vA .chip { background:rgba(212,175,55,.16); color:#e9c766; border:1px solid rgba(212,175,55,.4); }
+  .vA .task { color:#f4f1e8; }
+  .vA .swap { border:1px solid rgba(255,255,255,.22); color:#d9d9de; background:rgba(255,255,255,.04); }
+  .vA .foot { color:#e8e2cf; }
+  .vA .tabs { background:rgba(255,255,255,.06); border:1px solid rgba(212,175,55,.35); }
+  .vA .tab { color:#bdbdc6; } .vA .tab.on { background:linear-gradient(135deg,#f5d67b,#d4af37); color:#171106; font-weight:800; }
+
+  /* ---------- B 溶鉱炉ファーネス ---------- */
+  .vB .scr { background:radial-gradient(640px 420px at 50% 115%, rgba(255,80,0,.34), rgba(160,40,0,.12) 45%, transparent 70%), linear-gradient(180deg,#0d0b0c,#070607); }
+  .vB .bubble { background:rgba(30,20,14,.72); border:1px solid rgba(255,122,26,.55); color:#ffe3c2; box-shadow:inset 0 1px 0 rgba(255,180,90,.35); }
+  .vB .tail { border-left:13px solid rgba(255,122,26,.55); }
+  .vB .date { color:#c98d5f; }
+  .vB .title { background:linear-gradient(90deg,#ffd9a0,#ff7a1a 60%,#e65100); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .vB .card { background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.13); border-left:4px solid #ff6a00; box-shadow:inset 0 1px 0 rgba(255,255,255,.16); }
+  .vB .dot { background:radial-gradient(circle at 35% 30%, #ffb066, #e65100); }
+  .vB .chip { background:rgba(176,141,87,.18); color:#d8ab6d; border:1px solid rgba(176,141,87,.45); }
+  .vB .task { color:#f6efe6; }
+  .vB .swap { background:linear-gradient(90deg,#ff7a1a,#e65100); color:#fff; font-weight:700; }
+  .vB .foot { color:#e6cdb2; }
+  .vB .tabs { background:rgba(20,14,10,.8); border:1px solid rgba(255,122,26,.3); }
+  .vB .tab { color:#c4a184; } .vB .tab.on { background:linear-gradient(135deg,#ffb066,#e65100); color:#fff; font-weight:800; }
+
+  /* ---------- C 鍛冶フォージ ---------- */
+  .vC .scr { background:repeating-linear-gradient(90deg, rgba(255,255,255,.014) 0 2px, transparent 2px 5px), linear-gradient(180deg,#1a1b20,#0b0b0e); }
+  .vC .bubble { background:linear-gradient(180deg,rgba(70,72,82,.55),rgba(40,41,48,.55)); border:1px solid #6d6f7a; color:#f0ead2; box-shadow:inset 0 1px 0 rgba(255,255,255,.35); }
+  .vC .tail { border-left:13px solid #6d6f7a; }
+  .vC .date { color:#9d9fab; }
+  .vC .title { color:#e9c766; letter-spacing:.08em; text-shadow:0 2px 0 rgba(0,0,0,.6); }
+  .vC .card { position:relative; background:linear-gradient(180deg,rgba(96,98,110,.4),rgba(52,53,62,.4)); border:1px solid #7a7c88; box-shadow:inset 0 1px 0 rgba(255,255,255,.3), inset 0 -1px 0 rgba(0,0,0,.5); }
+  .vC .card::before, .vC .card::after { content:""; position:absolute; width:7px; height:7px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #e8e8ee, #55565e); top:8px; }
+  .vC .card::before { left:8px; } .vC .card::after { right:8px; }
+  .vC .dot { border:2px solid #c9ccd6; background:rgba(0,0,0,.25); }
+  .vC .chip { background:linear-gradient(135deg,#f5d67b,#b8860b); color:#1c1503; }
+  .vC .task { color:#f4f2ea; }
+  .vC .swap { border:1px solid #7a7c88; color:#e3ddc8; background:rgba(255,255,255,.03); }
+  .vC .foot { color:#cfc9ae; }
+  .vC .tabs { background:linear-gradient(180deg,rgba(80,82,94,.5),rgba(44,45,54,.5)); border:1px solid #7a7c88; }
+  .vC .tab { color:#b9bcc7; } .vC .tab.on { background:linear-gradient(135deg,#f5d67b,#b8860b); color:#1c1503; font-weight:800; }
+
+  /* ---------- D 炎メイン ---------- */
+  .vD .scr { background:radial-gradient(520px 300px at 82% -4%, rgba(255,106,0,.4), rgba(230,81,0,.12) 48%, transparent 70%), linear-gradient(180deg,#0c0a09,#060606); }
+  .vD .bubble { background:rgba(255,255,255,.06); border:1px solid rgba(255,150,60,.5); color:#ffe9d2; box-shadow:inset 0 1px 0 rgba(255,255,255,.22); }
+  .vD .tail { border-left:13px solid rgba(255,150,60,.5); }
+  .vD .date { color:#c9a06a; }
+  .vD .title { color:#fff; }
+  .vD .card { background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.035)); border:1px solid rgba(255,255,255,.14); border-top:2px solid rgba(255,122,26,.75); box-shadow:inset 0 1px 0 rgba(255,255,255,.18); }
+  .vD .dot { background:radial-gradient(circle at 35% 30%, #ffc46b, #ff6a00 70%, #e65100); }
+  .vD .chip { background:rgba(212,175,55,.14); color:#e9c766; }
+  .vD .task { color:#f6f2ea; }
+  .vD .swap { border:1px solid rgba(255,150,60,.45); color:#ffd9ae; background:rgba(255,106,0,.07); }
+  .vD .foot { color:#ead9c2; }
+  .vD .tabs { background:rgba(255,255,255,.05); border:1px solid rgba(255,150,60,.3); }
+  .vD .tab { color:#c9bda9; } .vD .tab.on { background:rgba(255,255,255,.92); color:#191007; font-weight:800; }
+
+  /* ---------- E 漆黒×純金 ---------- */
+  .vE .scr { background:#000; }
+  .vE .bubble { background:rgba(255,255,255,.03); border:1px solid rgba(212,175,55,.38); color:#efe8d0; }
+  .vE .tail { border-left:13px solid rgba(212,175,55,.38); }
+  .vE .date { color:#8f855f; letter-spacing:.14em; }
+  .vE .title { color:#f5f2e8; font-weight:700; }
+  .vE .cards { gap:17px; }
+  .vE .card { background:rgba(255,255,255,.028); border:1px solid rgba(212,175,55,.3); border-radius:16px; box-shadow:inset 0 1px 0 rgba(255,255,255,.1); }
+  .vE .dot { border:1px solid rgba(233,199,102,.8); }
+  .vE .chip { background:transparent; border:1px solid rgba(212,175,55,.5); color:#d9bc62; }
+  .vE .task { color:#f2efe4; font-weight:600; }
+  .vE .swap { border:1px solid rgba(255,255,255,.16); color:#c9c9ce; background:transparent; }
+  .vE .foot { color:#b7ad8a; }
+  .vE .tabs { background:rgba(255,255,255,.03); border:1px solid rgba(212,175,55,.3); }
+  .vE .tab { color:#a9a9b0; } .vE .tab.on { background:rgba(212,175,55,.16); color:#e9c766; font-weight:700; border:1px solid rgba(212,175,55,.5); padding:8px 0; }
+
+  /* ---------- F バーニングゴールド ---------- */
+  .vF .scr { background:radial-gradient(560px 330px at 85% -6%, rgba(255,150,40,.26), transparent 60%), radial-gradient(500px 300px at 0% 110%, rgba(212,175,55,.12), transparent 60%), linear-gradient(180deg,#0e0c08,#070605); }
+  .vF .bubble { background:linear-gradient(180deg,rgba(245,214,123,.16),rgba(212,175,55,.08)); border:1px solid rgba(245,214,123,.6); color:#fdf3d0; box-shadow:inset 0 1px 0 rgba(255,240,190,.5); }
+  .vF .tail { border-left:13px solid rgba(245,214,123,.6); }
+  .vF .date { color:#c8ab60; }
+  .vF .title { background:linear-gradient(90deg,#fdf3d0,#e9c766 55%,#ff8a2a); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .vF .card { background:linear-gradient(#171410,#171410) padding-box, linear-gradient(135deg, rgba(245,214,123,.85), rgba(255,106,0,.65)) border-box; border:1.5px solid transparent; box-shadow:inset 0 1px 0 rgba(255,255,255,.14); }
+  .vF .dot { background:radial-gradient(circle at 35% 30%, #ffe9a8, #d4af37 65%, #b8860b); }
+  .vF .chip { background:linear-gradient(135deg,#f5d67b,#d4af37); color:#1c1503; }
+  .vF .task { color:#faf5e6; }
+  .vF .swap { background:linear-gradient(90deg,#f5d67b,#ff8a2a); color:#221503; font-weight:800; }
+  .vF .foot { color:#efe3ba; }
+  .vF .tabs { background:rgba(30,24,12,.75); border:1px solid rgba(245,214,123,.45); }
+  .vF .tab { color:#cdb877; } .vF .tab.on { background:linear-gradient(135deg,#f5d67b,#ff8a2a); color:#221503; font-weight:800; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f58c1e"/><stop offset="1" stop-color="#e65100"/></linearGradient>
+    <linearGradient id="fi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe9b8"/><stop offset="1" stop-color="#ffc46b"/></linearGradient>
+  </defs>
+</svg>
+<div class="board">
+  <h1>ミガケル デザイン案 — <span class="gold">黒 × 金 × 炎</span>（ガラスは維持）</h1>
+  <div class="sub">今日画面の6案。気に入った案を番号で教えてください。要素の組み合わせ（例：Aの土台＋Fの枠）もできます。</div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const flame = `<svg class="flame" viewBox="0 0 100 100"><path d="M56 3 C66 16 86 30 86 62 C86 84 70 97 52 97 C34 97 18 84 18 62 C18 48 22 40 30 28 C24 22 24 14 33 10 C42 6 48 8 56 3 Z" fill="url(#fg)"/><path d="M53 46 C58 54 69 62 69 78 C69 89 61 95 52 95 C43 95 35 89 35 78 C35 68 44 56 53 46 Z" fill="url(#fi)"/><path d="M28 50 L44 56 M72 50 L56 56" stroke="#4a2405" stroke-width="5.5" stroke-linecap="round"/><ellipse cx="36" cy="65" rx="5" ry="6" fill="#4a2405"/><ellipse cx="64" cy="65" rx="5" ry="6" fill="#4a2405"/><circle cx="34" cy="62" r="2" fill="#fff"/><circle cx="62" cy="62" r="2" fill="#fff"/><path d="M40 74 Q50 90 60 74 Q50 79 40 74 Z" fill="#7a2e12"/><circle cx="24" cy="72" r="6" fill="#ff785a" opacity="0.35"/><circle cx="76" cy="72" r="6" fill="#ff785a" opacity="0.35"/></svg>`;
+function phone(v, titleHtml) {
+  return `<div class="phone ${v}"><div class="scr">
+    <div class="status"><span>9:41</span><span>5G ▰▰▰</span></div>
+    <div class="buddy"><div class="bubble">おはよう！今日も整えていこう！</div><div class="tail"></div>${flame}</div>
+    <div class="date">11月22日（日）・昨日より少し好きになる</div>
+    <div class="title">${titleHtml}</div>
+    <div class="cards">
+      <div class="card"><div class="dot"></div><div><span class="chip">からだ</span><div class="task">たんぱく質を1品足す</div></div></div>
+      <div class="card"><div class="dot"></div><div><span class="chip">みため</span><div class="task">髪を整える</div></div></div>
+      <div class="card"><div class="dot"></div><div><span class="chip">こころ</span><div class="task">スマホを置いて30分</div></div></div>
+    </div>
+    <div class="swap">『たんぱく質を1品足す』を『湯船につかる』に変える</div>
+    <div class="foot">タップで完了。それだけ。</div>
+    <div class="sp"></div>
+    <div class="tabs"><div class="tab on">今日</div><div class="tab">鏡</div><div class="tab">図鑑</div><div class="tab">わたし</div></div>
+  </div></div>`;
+}
+const data = [
+  ["vA","1","A 黒金ベーシック", true, "今のガラスに金の縁取り。炎はバディと差し色だけに絞った、王道で一番落ち着いた案。", "今日の<b>3</b>つ"],
+  ["vB","2","B 溶鉱炉ファーネス", false, "画面の下から炎の熱がにじむ。ボタンは炎グラデーション。熱血度はいちばん高い。", "今日の3つ"],
+  ["vC","3","C 鍛冶フォージ", false, "金属プレート＋リベット（鋲）の鍛冶屋風。金はプレートとチップに。無骨で男らしい。", "今日の3つ"],
+  ["vD","4","D 炎メイン", false, "右上のバディ周りに炎の光。カードの上縁にも炎の光。金は小さなラベルだけに抑えた。", "今日の3つ"],
+  ["vE","5","E 漆黒×純金", false, "真っ黒に細い金の線だけ。余白たっぷりの静かな高級感。今の「静かな強さ」に一番近い。", "今日の3つ"],
+  ["vF","6","F バーニングゴールド", false, "金がいちばん強い案。見出しは金グラデーション、カードの枠は金→炎のグラデーション。", "今日の3つ"],
+];
+document.getElementById("grid").innerHTML = data.map(d => `
+  <div class="cell">${phone(d[0], d[5])}
+    <div class="cap"><div class="name"><span class="no">${d[1]}</span>${d[2]}${d[3] ? '<span class="rec">パソパソのおすすめ</span>' : ''}</div><p>${d[4]}</p></div>
+  </div>`).join("");
+</script>
+</body>
+</html>
