@@ -16,5 +16,9 @@ if ! curl -s -o /dev/null --max-time 3 http://127.0.0.1:18080/central/; then
   (cd ~/workspace/tools && nohup python3 mirror.py > /tmp/mirror.log 2>&1 &)
   sleep 1
 fi
-~/workspace/tools/gradle-8.9/bin/gradle "$@" \
+# Build serialization rule (user decision 2026-11-23, AGENTS.md): only one
+# Gradle/Flutter build at a time across ALL projects on this VM, via the
+# shared flock wrapper (waits up to 3600s).
+exec ~/workspace/tools/with-build-lock.sh \
+  ~/workspace/tools/gradle-8.9/bin/gradle "$@" \
   -Dorg.gradle.daemon=false -Dkotlin.daemon.enabled=false --max-workers=1
