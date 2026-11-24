@@ -17,3 +17,6 @@ build-*.log
 .idea/
 *.iml
 .DS_Store
+
+# Icon work scratch
+icon-work/
