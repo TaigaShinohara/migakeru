@@ -283,25 +283,74 @@ class MigakeruLogicTest {
     fun buddyLineReactsToState() {
         val day = LocalDate.of(2026, 11, 24)
         // All done beats everything.
-        val allDone = MigakeruLogic.buddyLine(9, day, 3, day.minusDays(10), graduationReady = true)
+        val allDone = MigakeruLogic.buddyLine(9, day, 3, 3, day.minusDays(10), unlockNear = true)
         assertTrue(allDone.contains("十分") || allDone.contains("完了") || allDone.contains("完璧"))
         // Some progress beats a plain greeting.
-        val some = MigakeruLogic.buddyLine(9, day, 1, day.minusDays(1), graduationReady = false)
+        val some = MigakeruLogic.buddyLine(9, day, 1, 3, day.minusDays(1), unlockNear = false)
         assertFalse(some.startsWith("おはよう"))
         // Returning after a gap: welcomed, never blamed.
-        val back = MigakeruLogic.buddyLine(9, day, 0, day.minusDays(5), graduationReady = false)
+        val back = MigakeruLogic.buddyLine(9, day, 0, 3, day.minusDays(5), unlockNear = false)
         assertTrue(back.contains("おかえり") || back.contains("久しぶり") || back.contains("戻って"))
         // A 2-day gap is not a "return" yet: plain greeting family.
-        val plain = MigakeruLogic.buddyLine(9, day, 0, day.minusDays(2), graduationReady = false)
+        val plain = MigakeruLogic.buddyLine(9, day, 0, 3, day.minusDays(2), unlockNear = false)
         assertTrue(plain.startsWith("おはよう"))
-        // Graduation pending is pointed at when nothing else applies.
-        val grad = MigakeruLogic.buddyLine(9, day, 0, day.minusDays(1), graduationReady = true)
-        assertTrue(grad.contains("卒業") || grad.contains("身について"))
+        // A slot unlock one day away is pointed at when nothing else applies.
+        val unlock = MigakeruLogic.buddyLine(9, day, 0, 3, day.minusDays(1), unlockNear = true)
+        assertTrue(unlock.contains("枠"))
         // Greetings rotate across days instead of one fixed sentence.
         val lines = (0..5).map {
-            MigakeruLogic.buddyLine(9, day.plusDays(it.toLong()), 0, null, graduationReady = false)
+            MigakeruLogic.buddyLine(9, day.plusDays(it.toLong()), 0, 3, null, unlockNear = false)
         }
         assertTrue("greetings did not rotate: $lines", lines.toSet().size >= 2)
+    }
+
+    /** v0.7.0: every catalog challenge carries points in 1..5. */
+    @Test
+    fun pointsTableCoversCatalog() {
+        assertEquals(24, MigakeruLogic.CATALOG.size)
+        for (item in MigakeruLogic.CATALOG) {
+            val p = MigakeruLogic.pointsOf(item.id)
+            assertTrue("${item.id} points out of range: $p", p in 1..5)
+        }
+        // The hardest to sustain pays the most; the lightest pays 1.
+        assertEquals(5, MigakeruLogic.pointsOf("kintore"))
+        assertEquals(4, MigakeruLogic.pointsOf("walk"))
+        assertEquals(1, MigakeruLogic.pointsOf("breath"))
+        assertEquals(1, MigakeruLogic.pointsOf("music"))
+    }
+
+    /** v0.7.0: settlement math — done pays points, a miss costs a flat 1. */
+    @Test
+    fun dayDeltaPaysPointsAndChargesFlatOne() {
+        val set = listOf("kintore", "skin", "breath") // 5 + 1 + 1
+        assertEquals(7, MigakeruLogic.dayDelta(set, set.toSet()))
+        assertEquals(7, MigakeruLogic.dayEarned(set, set.toSet()))
+        // Two done, one missed: points of the done minus a flat 1.
+        assertEquals(5 + 1 - 1, MigakeruLogic.dayDelta(set, setOf("kintore", "skin")))
+        assertEquals(6, MigakeruLogic.dayEarned(set, setOf("kintore", "skin")))
+        // None done: −1 per challenge, whatever their points.
+        assertEquals(-3, MigakeruLogic.dayDelta(set, emptySet()))
+        assertEquals(0, MigakeruLogic.dayDelta(emptyList(), emptySet()))
+    }
+
+    /** v0.7.0: the slot-unlock state machine. */
+    @Test
+    fun unlockStateAdvancesBySettledDays() {
+        var s = MigakeruLogic.UnlockState(3, 0, false)
+        s = MigakeruLogic.applySettledDay(s, true)
+        assertEquals(MigakeruLogic.UnlockState(3, 1, false), s)
+        s = MigakeruLogic.applySettledDay(s, true)
+        assertEquals(MigakeruLogic.UnlockState(3, 2, false), s)
+        // A miss resets the streak, slots untouched.
+        s = MigakeruLogic.applySettledDay(s, false)
+        assertEquals(MigakeruLogic.UnlockState(3, 0, false), s)
+        // Three all-done days in a row unlock +1 and flag the celebration.
+        repeat(3) { s = MigakeruLogic.applySettledDay(s, true) }
+        assertEquals(MigakeruLogic.UnlockState(4, 0, true), s)
+        // At max slots the streak just cycles, no celebration.
+        var maxed = MigakeruLogic.UnlockState(MigakeruLogic.MAX_SLOTS, 0, false)
+        repeat(3) { maxed = MigakeruLogic.applySettledDay(maxed, true) }
+        assertEquals(MigakeruLogic.UnlockState(MigakeruLogic.MAX_SLOTS, 0, false), maxed)
     }
 
     @Test

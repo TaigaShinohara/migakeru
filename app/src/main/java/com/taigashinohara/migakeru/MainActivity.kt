@@ -89,6 +89,7 @@ class MainActivity : Activity() {
     private var journalOpen = false
     private var weekOffset = 0
     private var openGuide = -1
+    private var pendingCatalog = false
 
     // Onboarding state (mobile_onboarding skill; design v0.5 §5.5).
     private var obPage = 0
@@ -120,7 +121,6 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
-            migrateGraduationRests()
             if (!prefs.getBoolean("ob_done", false)) {
                 showOnboarding()
             } else {
@@ -200,6 +200,10 @@ class MainActivity : Activity() {
     }
 
     private fun showMain() {
+        // v0.7.0: first run of the challenge system, then settle past days
+        // before anything renders, so score/slots are already current.
+        initChallengeSystem()
+        settlePastDays()
         val root = FrameLayout(this)
         root.addView(backgroundLayer(), FrameLayout.LayoutParams(-1, -1))
 
@@ -244,6 +248,11 @@ class MainActivity : Activity() {
         root.addView(tabBar, barLp)
         setContentView(root)
         showScreen(0)
+        if (pendingCatalog) {
+            // Fresh from onboarding: the first thing is picking his own 3.
+            pendingCatalog = false
+            showScreen(4)
+        }
         selfCheck(root, "main")
     }
 
@@ -301,103 +310,122 @@ class MainActivity : Activity() {
     /** Ever-graduated item ids — the permanent badge record （わたし画面）. */
     private fun badges(): Set<String> = prefs.getStringSet("graduated", emptySet()) ?: emptySet()
 
-    /** Graduation rests: itemId -> the date the item returns to the pool. */
-    private fun restUntil(): Map<String, LocalDate> =
-        (prefs.getStringSet("rest_until", emptySet()) ?: emptySet()).mapNotNull { entry ->
-            val parts = entry.split("@")
-            if (parts.size != 2) return@mapNotNull null
-            runCatching { parts[0] to LocalDate.parse(parts[1], dateFmt) }.getOrNull()
-        }.toMap()
-
-    private fun saveRestUntil(map: Map<String, LocalDate>) {
-        prefs.edit()
-            .putStringSet("rest_until", map.map { "${it.key}@${it.value.format(dateFmt)}" }.toSet())
-            .apply()
-    }
-
-    /** Items currently out of the pool on a graduation rest. */
-    private fun restingIds(today: LocalDate): Set<String> =
-        restUntil().filterValues { today.isBefore(it) }.keys
-
-    /**
-     * v0.6.0 migration: up to v0.5.1 "graduated" meant permanently out of
-     * the pool. Those items keep their badge, are treated as having
-     * already served their rest (they return immediately — a fresh 60-day
-     * rest on top would narrow exactly the most diligent users' rotation
-     * for two months; U2 re-review note), and the reserves their
-     * graduations would have unlocked are unlocked retroactively, one
-     * per graduation in each pillar.
-     */
-    private fun migrateGraduationRests() {
-        if (prefs.getBoolean("rest_migrated", false)) return
-        var unlockedNow = unlocked()
-        for (pillar in listOf(Item.KARADA, Item.MITAME, Item.KOKORO)) {
-            val earned = badges().count { MigakeruLogic.itemById(it)?.pillar == pillar }
-            repeat(earned) {
-                MigakeruLogic.nextReserve(pillar, unlockedNow)?.let { unlockedNow = unlockedNow + it.id }
-            }
-        }
-        val editor = prefs.edit().putBoolean("rest_migrated", true)
-        if (unlockedNow != unlocked()) editor.putStringSet("unlocked", unlockedNow)
-        editor.apply()
-    }
-
-    /** v0.6.0 (U2): reserve items unlocked by graduations so far. */
-    private fun unlocked(): Set<String> = prefs.getStringSet("unlocked", emptySet()) ?: emptySet()
-
-    /** Completion dates per item id, for graduation checks. */
-    private fun completionsMap(): Map<String, List<LocalDate>> =
-        (MigakeruLogic.POOL + MigakeruLogic.RESERVE).associate { it.id to doneDatesFor(it.id) }
-
     /** Most recent completion day before [today]; null if none yet. */
     private fun lastActiveBefore(today: LocalDate): LocalDate? =
         doneSet().mapNotNull {
             runCatching { LocalDate.parse(it.substringAfter("@"), dateFmt) }.getOrNull()
         }.filter { it.isBefore(today) }.maxOrNull()
 
-    /**
-     * Shared graduation action (today + mirror): the item earns its badge
-     * (permanent), rests for GRADUATION_REST_DAYS and then quietly returns
-     * to the pool (U2 re-review fix — a permanent removal could not be
-     * offset by any finite reserve), and the next reserve of the same
-     * pillar unlocks right away, so accepting a graduation always brings
-     * a fresh candidate with it.
-     */
-    private fun graduate(item: Item) {
-        val reserve = MigakeruLogic.nextReserve(item.pillar, unlocked())
-        val editor = prefs.edit().putStringSet("graduated", badges() + item.id)
-        if (reserve != null) editor.putStringSet("unlocked", unlocked() + reserve.id)
+    // ---------- v0.7.0: チャレンジ＆ポイント ----------
+
+    /** The user's current challenge set, in catalog order. */
+    private fun challengeSet(): List<String> =
+        (prefs.getStringSet("ch_set", null) ?: emptySet())
+            .sortedBy { id -> MigakeruLogic.CATALOG.indexOfFirst { it.id == id } }
+
+    /** Set history: the date a set took effect -> its challenge ids. */
+    private fun challengeHistory(): Map<LocalDate, List<String>> =
+        (prefs.getStringSet("ch_history", emptySet()) ?: emptySet()).mapNotNull { entry ->
+            val datePart = entry.substringBefore(":", "")
+            if (datePart.isEmpty()) return@mapNotNull null
+            val ids = entry.substringAfter(":", "").split(",").filter { it.isNotEmpty() }
+            runCatching { LocalDate.parse(datePart, dateFmt) to ids }.getOrNull()
+        }.toMap()
+
+    private fun saveChallengeSet(ids: List<String>) {
+        val today = LocalDate.now()
+        val history = challengeHistory() + (today to ids)
+        val editor = prefs.edit()
+            .putStringSet("ch_set", ids.toSet())
+            .putStringSet(
+                "ch_history",
+                history.map { "${it.key.format(dateFmt)}:${it.value.joinToString(",")}" }.toSet(),
+            )
+        // Filling the last free slot ends the unlock celebration.
+        if (ids.size >= slotCount()) editor.putBoolean("ch_unlock_pending", false)
         editor.apply()
-        saveRestUntil(
-            restUntil() + (item.id to LocalDate.now().plusDays(MigakeruLogic.GRADUATION_REST_DAYS)),
-        )
-        Toast.makeText(
-            this,
-            if (reserve != null) "卒業バッチに入れたよ。新しい候補『${reserve.label}』が増えたよ"
-            else "卒業バッチに入れたよ",
-            Toast.LENGTH_LONG,
-        ).show()
     }
 
-    private fun todayPicks(date: LocalDate): List<Item> {
-        val key = "pick_${date.format(dateFmt)}"
-        val saved = prefs.getString(key, null)
+    /** The challenge set that was in effect on [date] (empty before v0.7.0). */
+    private fun setForDate(date: LocalDate): List<String> =
+        challengeHistory().filterKeys { !it.isAfter(date) }.maxByOrNull { it.key }?.value
+            ?: emptyList()
+
+    private fun slotCount(): Int = prefs.getInt("ch_slots", MigakeruLogic.INITIAL_SLOTS)
+    private fun unlockStreak(): Int = prefs.getInt("ch_streak", 0)
+    private fun scoreTotal(): Int = prefs.getInt("score_total", 0)
+
+    /**
+     * One-time v0.7.0 setup. Upgraders keep the 3 items the old system
+     * served today as their first set (continuity, no cold start);
+     * brand-new users (ch_fresh, set by onboarding) start empty and pick
+     * their own 3 in the catalog. Settlement starts from the install
+     * day — past days are never judged by rules that did not exist.
+     */
+    private fun initChallengeSystem() {
+        if (prefs.getBoolean("ch_init", false)) return
+        val today = LocalDate.now()
+        val editor = prefs.edit().putBoolean("ch_init", true)
+        if (!prefs.contains("ch_set") && !prefs.getBoolean("ch_fresh", false)) {
+            val defaults = legacyTodayPicks(today).map { it.id }
+            editor.putStringSet("ch_set", defaults.toSet())
+            editor.putStringSet(
+                "ch_history",
+                setOf("${today.format(dateFmt)}:${defaults.joinToString(",")}"),
+            )
+        }
+        if (!prefs.contains("score_settled_until")) {
+            editor.putString("score_settled_until", today.minusDays(1).format(dateFmt))
+        }
+        editor.apply()
+    }
+
+    /**
+     * Settle every unsettled day up to yesterday (user's rule): per set
+     * challenge, done = +its points, missed = −1 flat. All-done days feed
+     * the slot-unlock streak. Idempotent — settled_until only moves on.
+     */
+    private fun settlePastDays() {
+        val yesterday = LocalDate.now().minusDays(1)
+        var cursor = runCatching {
+            LocalDate.parse(prefs.getString("score_settled_until", "") ?: "", dateFmt)
+        }.getOrNull() ?: return
+        if (!cursor.isBefore(yesterday)) return
+        var score = scoreTotal()
+        var state = MigakeruLogic.UnlockState(
+            slotCount(), unlockStreak(), prefs.getBoolean("ch_unlock_pending", false),
+        )
+        var day = cursor.plusDays(1)
+        var guard = 0
+        while (!day.isAfter(yesterday) && guard < 400) {
+            val set = setForDate(day)
+            if (set.isNotEmpty()) {
+                val doneIds = set.filter { isDone(it, day) }.toSet()
+                score += MigakeruLogic.dayDelta(set, doneIds)
+                state = MigakeruLogic.applySettledDay(state, doneIds.size == set.size)
+            }
+            cursor = day
+            day = day.plusDays(1)
+            guard++
+        }
+        prefs.edit()
+            .putInt("score_total", score)
+            .putInt("ch_slots", state.slots)
+            .putInt("ch_streak", state.streak)
+            .putBoolean("ch_unlock_pending", state.pendingUnlock)
+            .putString("score_settled_until", cursor.format(dateFmt))
+            .apply()
+    }
+
+    /** v0.7.0: the old auto-picks survive only as an upgrader's first set. */
+    private fun legacyTodayPicks(date: LocalDate): List<Item> {
+        val saved = prefs.getString("pick_${date.format(dateFmt)}", null)
         if (saved != null) {
             val items = saved.split(",").mapNotNull { MigakeruLogic.itemById(it) }
             if (items.size == 3) return items
         }
-        // v0.6.0: the least-recently-picked rule needs a longer memory than
-        // a week — scan 90 days of saved picks to build the recent map.
-        val recent = mutableMapOf<String, LocalDate>()
-        for (d in 1..90) {
-            val past = date.minusDays(d.toLong())
-            val pastSaved = prefs.getString("pick_${past.format(dateFmt)}", null) ?: continue
-            pastSaved.split(",").forEach { id -> recent.putIfAbsent(id, past) }
-        }
         val focus = prefs.getString("ob_focus", null)?.takeIf { it.isNotEmpty() }
-        val picks = MigakeruLogic.pickToday(date, recent, restingIds(date), focus, unlocked())
-        prefs.edit().putString(key, picks.joinToString(",") { it.id }).apply()
-        return picks
+        return MigakeruLogic.pickToday(date, emptyMap(), emptySet(), focus, emptySet())
     }
 
     // ---------- shared UI helpers ----------
@@ -514,7 +542,8 @@ class MainActivity : Activity() {
     private fun showScreen(index: Int) {
         currentTab = index
         tabButtons.forEachIndexed { i, b ->
-            val selected = i == index
+            // The catalog (4) belongs to the 今日 tab visually.
+            val selected = i == index || (index == 4 && i == 0)
             b.typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             // Selected = gold gradient pill + near-black bold text (design A).
             b.setTextColor(if (selected) goldDark else Color.rgb(0xBD, 0xBD, 0xC6))
@@ -532,6 +561,7 @@ class MainActivity : Activity() {
                 0 -> todayScreen()
                 1 -> mirrorScreen()
                 2 -> guideScreen()
+                4 -> catalogScreen()
                 else -> meScreen()
             },
             FrameLayout.LayoutParams(-1, -1),
@@ -700,8 +730,11 @@ class MainActivity : Activity() {
             .putInt("ob_version", 1)
             .putBoolean("intro_done", true)
             .putString("ob_focus", obFocus ?: "")
+            // v0.7.0: a brand-new user picks his own first set (no defaults).
+            .putBoolean("ch_fresh", true)
             .apply()
         if (quiet) Toast.makeText(this, "あとで、本体で案内するね", Toast.LENGTH_SHORT).show()
+        pendingCatalog = true
         showMain()
     }
 
@@ -795,24 +828,24 @@ class MainActivity : Activity() {
                     Item.KARADA -> {
                         page.addView(label("「からだを整えたい」、あなたには。", 17f, paleBlue))
                         page.addView(label("ミガケルが、ぴったり。", 26f, white, bold = true), fullLp(8))
-                        page.addView(label("毎日、からだ・みため・こころから1つずつ。どの柱も、ひと通りまんべんなく回るように出す。", 15f, paleBlue), fullLp(8))
+                        page.addView(label("チャレンジを自分で3つ選んで、毎日こなしていく。気になる柱のチャレンジは、カタログで先に並べておく。", 15f, paleBlue), fullLp(8))
                     }
                     Item.MITAME -> {
                         page.addView(label("「見た目を整えたい」、あなたには。", 17f, paleBlue))
                         page.addView(label("ミガケルが、ぴったり。", 26f, white, bold = true), fullLp(8))
-                        page.addView(label("毎日、からだ・みため・こころから1つずつ。どの柱も、ひと通りまんべんなく回るように出す。", 15f, paleBlue), fullLp(8))
+                        page.addView(label("チャレンジを自分で3つ選んで、毎日こなしていく。気になる柱のチャレンジは、カタログで先に並べておく。", 15f, paleBlue), fullLp(8))
                     }
                     else -> {
                         page.addView(label("まだ決めなくて、大丈夫。", 17f, paleBlue))
                         page.addView(label("様子見からで、ぴったり。", 26f, white, bold = true), fullLp(8))
-                        page.addView(label("毎日3つ出るから、気になったものだけやればいい。どれも、まんべんなく回ってくる。", 15f, paleBlue), fullLp(8))
+                        page.addView(label("チャレンジを自分で3つ選ぶところから。気になったものを課せばいい。", 15f, paleBlue), fullLp(8))
                     }
                 }
                 page.addView(primaryButton("次へ") { renderObPage(3) }, fullLp(32))
             }
             3 -> { // アイデンティティ
-                page.addView(label("ミガケルは、今日の3つだけを出すアプリ。", 26f, white, bold = true))
-                page.addView(label("考えるのはアプリの仕事。あなたは選ばなくていい。", 15f, paleBlue), fullLp(8))
+                page.addView(label("ミガケルは、自分のチャレンジを毎日こなすアプリ。", 26f, white, bold = true))
+                page.addView(label("選ぶのは最初だけ。あとは毎日こなすだけ。", 15f, paleBlue), fullLp(8))
                 page.addView(miniRow(Item.KARADA, "筋トレに行く"), fullLp(24))
                 page.addView(miniRow(Item.MITAME, "爪を整える"), fullLp(12))
                 page.addView(miniRow(Item.KOKORO, "瞑想 10分"), fullLp(12))
@@ -828,7 +861,7 @@ class MainActivity : Activity() {
                 page.addView(primaryButton("次へ") { renderObPage(5) }, fullLp(32))
             }
             5 -> { // ステップ1
-                page.addView(label("開く。今日の3つが出ている。", 26f, white, bold = true))
+                page.addView(label("開く。自分のチャレンジが出ている。", 26f, white, bold = true))
                 page.addView(label("ステップ 1 / 3", 13f, paleBlue), fullLp(8))
                 page.addView(miniRow(Item.KARADA, "歩く（目安 8,000歩）"), fullLp(24))
                 page.addView(miniRow(Item.MITAME, "肌を保湿する"), fullLp(12))
@@ -866,11 +899,15 @@ class MainActivity : Activity() {
                 page.addView(label("連続じゃなく、量で見える。", 15f, paleBlue), fullLp(16))
                 page.addView(primaryButton("次へ") { renderObPage(8) }, fullLp(32))
             }
-            8 -> { // 試し操作（本物の今日の1つ目）
+            8 -> { // 試し操作（本物の記録になる試しタップ）
                 val today = LocalDate.now()
-                val item = todayPicks(today).first()
+                // v0.7.0: the trial is the easiest challenge of the focus
+                // pillar (no focus -> からだ） — a gentle first completion.
+                val trialPillar = obFocus ?: Item.KARADA
+                val item = MigakeruLogic.CATALOG.filter { it.pillar == trialPillar }
+                    .minByOrNull { MigakeruLogic.pointsOf(it.id) } ?: MigakeruLogic.CATALOG.first()
                 page.addView(label("試しに、タップしてみて。", 26f, white, bold = true))
-                page.addView(label("これは本物の今日の1つ目。そのまま記録になる。", 15f, paleBlue), fullLp(8))
+                page.addView(label("これは本物の記録になる。タップで完了を試せる。", 15f, paleBlue), fullLp(8))
                 val praise = label("", 15f, white, bold = true).apply { alpha = 0f }
                 if (isDone(item.id, today)) trialDoneNow = true
                 // Built inline (not miniRow) so the mark can flip in place.
@@ -927,11 +964,11 @@ class MainActivity : Activity() {
                 page.addView(praise, fullLp(16))
                 page.addView(ghostButton("あとで試す") { finishOnboarding(quiet = true) }, fullLp(24))
             }
-            9 -> { // 期待：卒業
-                page.addView(label("続いた習慣は、卒業してバッチになる。", 26f, white, bold = true))
-                page.addView(label("身についた証が、静かに残る。", 15f, paleBlue), fullLp(8))
+            9 -> { // 期待：枠が増える
+                page.addView(label("全部続けられたら、枠が増える。", 26f, white, bold = true))
+                page.addView(label("課せるチャレンジが、少しずつ増えていく。", 15f, paleBlue), fullLp(8))
                 val badge = TextView(this).apply {
-                    text = "卒業"
+                    text = "+1"
                     textSize = 26f
                     setTextColor(white)
                     typeface = Typeface.DEFAULT_BOLD
@@ -949,11 +986,11 @@ class MainActivity : Activity() {
                 page.addView(primaryButton("次へ") { renderObPage(10) }, fullLp(32))
             }
             else -> { // 接続
-                page.addView(label("今日の3つが、待っている。", 26f, white, bold = true))
+                page.addView(label("最初のチャレンジ選びが、待っている。", 26f, white, bold = true))
                 page.addView(
                     label(
                         if (prefs.getBoolean("first_success", false)) "さっきの1つは、もう今日の記録に入っている。"
-                        else "最初の1つをタップするところから。",
+                        else "まずは3つ選ぶところから。",
                         15f, paleBlue,
                     ),
                     fullLp(8),
@@ -967,18 +1004,22 @@ class MainActivity : Activity() {
 
     private fun todayScreen(): ScrollView {
         val today = LocalDate.now()
-        val picks = todayPicks(today)
+        // v0.7.0: the day is no longer served — it is the user's own set.
+        val setIds = challengeSet()
+        val items = setIds.mapNotNull { MigakeruLogic.itemById(it) }
+        val doneToday = items.count { isDone(it.id, today) }
         return scrollPage { page ->
             // v0.4.0: hot-blooded buddy at the top-right; bubble on its left.
-            // v0.6.0 (U4): the bubble now reacts to the day's state —
-            // progress, a full clear, a return after a gap, a pending
-            // graduation — and the plain greetings rotate by date.
+            // v0.6.0 (U4): the bubble reacts to the day's state; v0.7.0: a
+            // slot unlock one all-done day away joins the reactions.
             val greeting = MigakeruLogic.buddyLine(
                 java.time.LocalTime.now().hour,
                 today,
-                picks.count { isDone(it.id, today) },
+                doneToday,
+                items.size,
                 lastActiveBefore(today),
-                MigakeruLogic.graduationCandidates(completionsMap(), today, restingIds(today), unlocked()).isNotEmpty(),
+                unlockStreak() == MigakeruLogic.UNLOCK_STREAK_DAYS - 1 &&
+                    slotCount() < MigakeruLogic.MAX_SLOTS && items.isNotEmpty(),
             )
             val buddyRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -996,7 +1037,24 @@ class MainActivity : Activity() {
 
             val dow = "月火水木金土日"[today.dayOfWeek.value - 1]
             page.addView(label("${today.monthValue}月${today.dayOfMonth}日（$dow）・昨日より少し好きになる", 13f, paleBlue), fullLp(8))
-            page.addView(label("今日の3つ", 26f, white, bold = true))
+            page.addView(label("マイチャレンジ", 26f, white, bold = true))
+
+            // v0.7.0: the score is the day's headline number — total so
+            // far, plus what today has earned up to now.
+            val earnedToday = MigakeruLogic.dayEarned(
+                setIds, items.filter { isDone(it.id, today) }.map { it.id }.toSet(),
+            )
+            val scoreCard = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = card()
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+            }
+            scoreCard.addView(label("ポイント", 15f, ink, bold = true))
+            scoreCard.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            scoreCard.addView(label("${scoreTotal()} pt", 20f, ink, bold = true))
+            scoreCard.addView(label("　今日 +$earnedToday pt", 15f, subOnGlass))
+            page.addView(scoreCard, fullLp(12))
 
             // K4: minimal first-run intro (one card, dismissed once, no wizard).
             if (!prefs.getBoolean("intro_done", false)) {
@@ -1006,9 +1064,9 @@ class MainActivity : Activity() {
                     setPadding(dp(16), dp(16), dp(16), dp(16))
                 }
                 intro.addView(label("はじめに", 17f, ink, bold = true))
-                intro.addView(label("・今日やることは3つだけ。タップで完了", 15f, subOnGlass))
-                intro.addView(label("・できたら積み重なって、身についたら卒業していく", 15f, subOnGlass))
-                intro.addView(label("・できなかった日は、それで終わり。持ち越しなし", 15f, subOnGlass))
+                intro.addView(label("・チャレンジを自分で選んで、毎日こなしていく", 15f, subOnGlass))
+                intro.addView(label("・できた分だけポイント。難しいものほど高い", 15f, subOnGlass))
+                intro.addView(label("・全部続けられたら枠が増えて、もっと課せる", 15f, subOnGlass))
                 intro.addView(primaryButton("はじめる") {
                     prefs.edit().putBoolean("intro_done", true).apply()
                     showScreen(0)
@@ -1016,7 +1074,7 @@ class MainActivity : Activity() {
                 page.addView(intro, fullLp(16))
             }
 
-            picks.forEach { item ->
+            items.forEach { item ->
                 val done = isDone(item.id, today)
                 val row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -1044,6 +1102,7 @@ class MainActivity : Activity() {
                 }
                 val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 chipRow.addView(pillarChip(item.pillar))
+                chipRow.addView(label("　${MigakeruLogic.pointsOf(item.id)} pt", 13f, goldText, bold = true))
                 texts.addView(chipRow)
                 texts.addView(label(item.label, 17f, if (done) subOnGlass else ink, bold = true))
                 row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -1056,11 +1115,11 @@ class MainActivity : Activity() {
                     } else {
                         // v0.6.0 (U5): a completion must answer back — the
                         // haptic lands here and the buddy's line changes to
-                        // a reaction on the re-render; the third one gets
-                        // its own small celebration.
+                        // a reaction on the re-render; clearing the whole
+                        // set gets its own small celebration.
                         haptic(row, true)
-                        if (picks.count { isDone(it.id, today) } == 3) {
-                            Toast.makeText(this, "今日の3つ、全部できたよ", Toast.LENGTH_SHORT).show()
+                        if (items.isNotEmpty() && items.all { isDone(it.id, today) }) {
+                            Toast.makeText(this, "全部できたよ", Toast.LENGTH_SHORT).show()
                         }
                     }
                     showScreen(0)
@@ -1068,62 +1127,87 @@ class MainActivity : Activity() {
                 page.addView(row, fullLp(16))
             }
 
-            val swapUsed = prefs.getBoolean("swap_${today.format(dateFmt)}", false)
-            val doneCount = picks.count { isDone(it.id, today) }
-            if (!swapUsed && doneCount < 3) {
-                // K5: the button names its target and destination BEFORE the tap.
-                val target = picks.first { !isDone(it.id, today) }
-                val next = MigakeruLogic.swapCandidate(
-                    target.pillar, picks.map { it.id }.toSet(), restingIds(today), today.dayOfYear, unlocked(),
-                )
-                if (next != null) {
-                    val swap = ghostButton("『${target.label}』を『${next.label}』に変える") {
-                        val newIds = picks.map { if (it.id == target.id) next.id else it.id }
-                        prefs.edit()
-                            .putString("pick_${today.format(dateFmt)}", newIds.joinToString(","))
-                            .putBoolean("swap_${today.format(dateFmt)}", true)
-                            .apply()
-                        Toast.makeText(this, "『${target.label}』を『${next.label}』に変えたよ", Toast.LENGTH_SHORT).show()
-                        showScreen(0)
-                    }
-                    page.addView(swap, fullLp(16))
-                }
-            }
-
-            // K2: graduation must be visible here, not only in the mirror.
-            // v0.6.0 (U1): proposals come from graduationCandidates, which
-            // never offers a graduation that would drain a pillar.
-            val readyToday = MigakeruLogic.graduationCandidates(
-                completionsMap(), today, restingIds(today), unlocked(),
-            )
-            readyToday.forEach { item ->
+            // v0.7.0: a freshly unlocked slot is celebrated here, with the
+            // way into the catalog one tap away.
+            if (prefs.getBoolean("ch_unlock_pending", false)) {
                 val box = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     background = card()
                     setPadding(dp(16), dp(16), dp(16), dp(16))
                 }
-                box.addView(label("「${item.label}」は身についてきたみたい。", 15f, ink, bold = true))
-                box.addView(primaryButton("卒業する") {
-                    graduate(item)
-                    showScreen(0)
-                }, fullLp(12))
+                box.addView(label("枠が増えたよ。チャレンジをもう1つ、自分に課せる。", 15f, ink, bold = true))
+                box.addView(primaryButton("チャレンジを選ぶ") { showScreen(4) }, fullLp(12))
                 page.addView(box, fullLp(16))
+            } else {
+                page.addView(ghostButton("チャレンジを選ぶ・変える") { showScreen(4) }, fullLp(16))
             }
 
-            // K2: near-graduation hint replaces the footer line (aux stays 2).
-            val nearest = MigakeruLogic.activeItems(unlocked())
-                .filter { it.id !in restingIds(today) }
-                .map { it to MigakeruLogic.countInWindow(doneDatesFor(it.id), today) }
-                .filter { it.second in (MigakeruLogic.GRADUATION_THRESHOLD - 2) until MigakeruLogic.GRADUATION_THRESHOLD }
-                .maxByOrNull { it.second }
+            val streak = unlockStreak()
             val footer = when {
-                readyToday.isNotEmpty() -> "卒業の提案が届いてるよ。"
-                doneCount == 3 -> "今日はもう十分。よく整えたね。"
-                nearest != null -> "「${nearest.first.label}」、あと ${MigakeruLogic.GRADUATION_THRESHOLD - nearest.second} 回で卒業が見えてくる。"
-                doneCount == 0 -> "タップで完了。それだけ。"
-                else -> "あと ${3 - doneCount} つ。急がなくていい。"
+                items.isEmpty() -> "まずはチャレンジを選ぼう。"
+                doneToday == items.size -> "今日はもう十分。よく整えたね。"
+                slotCount() >= MigakeruLogic.MAX_SLOTS -> "枠は最大。あとは回すだけ。"
+                streak == MigakeruLogic.UNLOCK_STREAK_DAYS - 1 -> "あと1日、全部できたら枠が増える。"
+                streak > 0 -> "全部できた日が ${streak} 日つづいてる。"
+                doneToday == 0 -> "タップで完了。それだけ。"
+                else -> "あと ${items.size - doneToday} つ。急がなくていい。"
             }
             page.addView(label(footer, 15f, white), fullLp(24))
+        }
+    }
+
+    // ---------- チャレンジ（カタログ） ----------
+
+    /**
+     * v0.7.0: the catalog. All 24 challenges grouped by pillar (the
+     * onboarding focus pillar first), each with its points; set/unset
+     * within the slot limit. Reached from 今日， not a tab of its own.
+     */
+    private fun catalogScreen(): ScrollView {
+        val setIds = challengeSet()
+        val slots = slotCount()
+        return scrollPage { page ->
+            page.addView(ghostButton("‹ 今日にもどる") { showScreen(0) })
+            page.addView(label("チャレンジ", 26f, white, bold = true), fullLp(16))
+            page.addView(label("セット中 ${setIds.size} / 枠 $slots", 17f, white, bold = true), fullLp(8))
+            page.addView(
+                label("難しいチャレンジほど高ポイント。できなかった日は、1つにつき −1 pt。全部続けられたら枠が増える。", 13f, paleBlue),
+                fullLp(4),
+            )
+            val focus = prefs.getString("ob_focus", null)?.takeIf { it.isNotEmpty() }
+            val pillars = listOf(Item.KARADA, Item.MITAME, Item.KOKORO)
+                .sortedBy { if (it == focus) 0 else 1 }
+            for (pillar in pillars) {
+                page.addView(label(pillar, 17f, white, bold = true), fullLp(24))
+                MigakeruLogic.CATALOG.filter { it.pillar == pillar }.forEach { item ->
+                    val inSet = item.id in setIds
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        background = card(inSet)
+                        setPadding(dp(16), dp(12), dp(12), dp(12))
+                        contentDescription = "${item.label}、${MigakeruLogic.pointsOf(item.id)}ポイント" +
+                            if (inSet) "、セット中" else ""
+                    }
+                    val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                    texts.addView(label(item.label, 15f, ink, bold = true))
+                    texts.addView(label("${MigakeruLogic.pointsOf(item.id)} pt", 13f, goldText, bold = true))
+                    row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    when {
+                        inSet -> row.addView(lightButton("外す") {
+                            saveChallengeSet(setIds - item.id)
+                            showScreen(4)
+                        })
+                        setIds.size < slots -> row.addView(lightButton("セット") {
+                            saveChallengeSet(setIds + item.id)
+                            Toast.makeText(this, "『${item.label}』をセットしたよ", Toast.LENGTH_SHORT).show()
+                            showScreen(4)
+                        })
+                        else -> row.addView(label("枠いっぱい", 13f, subOnGlass))
+                    }
+                    page.addView(row, fullLp(12))
+                }
+            }
         }
     }
 
@@ -1162,12 +1246,16 @@ class MainActivity : Activity() {
                 background = card()
                 setPadding(dp(16), dp(12), dp(16), dp(12))
             }
-            var weekTotal = 0
+            // v0.7.0: days under the challenge system show their own set
+            // (dots per challenge) and the day's points; older days keep
+            // the plain completion count they were recorded with.
+            fun signedPt(v: Int) = (if (v >= 0) "+$v" else "−${-v}") + " pt"
+            var weekPoints = 0
+            var weekHasPoints = false
+            var weekCount = 0
             for (off in 0..6) {
                 val d = monday.plusDays(off.toLong())
                 val future = d.isAfter(today)
-                val count = if (future) 0 else doneCountOn(d)
-                weekTotal += count
                 val dow = "月火水木金土日"[off]
                 val row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -1180,7 +1268,28 @@ class MainActivity : Activity() {
                     // Future days are not "missed" days: different mark entirely.
                     row.addView(label("これから", 13f, subOnGlass))
                 } else {
-                    row.addView(label("●".repeat(count) + "○".repeat((3 - count).coerceAtLeast(0)), 15f, orange))
+                    val set = setForDate(d)
+                    if (set.isNotEmpty()) {
+                        val doneIds = set.filter { isDone(it, d) }.toSet()
+                        row.addView(
+                            label(
+                                "●".repeat(doneIds.size) + "○".repeat(set.size - doneIds.size),
+                                15f, orange,
+                            ),
+                        )
+                        val dayPt = if (d == today) {
+                            MigakeruLogic.dayEarned(set, doneIds)
+                        } else {
+                            MigakeruLogic.dayDelta(set, doneIds)
+                        }
+                        weekPoints += dayPt
+                        weekHasPoints = true
+                        row.addView(label("　${signedPt(dayPt)}", 13f, subOnGlass))
+                    } else {
+                        val count = doneCountOn(d)
+                        weekCount += count
+                        row.addView(label("●".repeat(count), 15f, orange))
+                    }
                 }
                 weekCard.addView(row)
             }
@@ -1188,31 +1297,20 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, dp(8), 0, 0)
             }
-            totalRow.addView(label(if (weekOffset == 0) "今週の積み重ね" else "この週の積み重ね", 13f, subOnGlass))
-            totalRow.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            totalRow.addView(label("$weekTotal 個", 17f, ink, bold = true))
+            if (weekHasPoints) {
+                totalRow.addView(label(if (weekOffset == 0) "今週のポイント" else "この週のポイント", 13f, subOnGlass))
+                totalRow.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                totalRow.addView(label(signedPt(weekPoints), 17f, ink, bold = true))
+            } else {
+                totalRow.addView(label(if (weekOffset == 0) "今週の積み重ね" else "この週の積み重ね", 13f, subOnGlass))
+                totalRow.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                totalRow.addView(label("$weekCount 個", 17f, ink, bold = true))
+            }
             weekCard.addView(totalRow)
-            if (weekTotal == 0 && weekOffset == 0 && doneSet().isEmpty()) {
+            if (!weekHasPoints && weekCount == 0 && weekOffset == 0 && doneSet().isEmpty()) {
                 weekCard.addView(label("ここに、できた日が並んでいく。", 13f, subOnGlass))
             }
             page.addView(weekCard, fullLp(16))
-
-            val ready = MigakeruLogic.graduationCandidates(
-                completionsMap(), today, restingIds(today), unlocked(),
-            )
-            ready.forEach { item ->
-                val box = LinearLayout(this).apply {
-                    orientation = LinearLayout.VERTICAL
-                    background = card()
-                    setPadding(dp(16), dp(16), dp(16), dp(16))
-                }
-                box.addView(label("「${item.label}」は身についてきたみたい。", 15f, ink, bold = true))
-                box.addView(primaryButton("卒業する") {
-                    graduate(item)
-                    showScreen(1)
-                }, fullLp(12))
-                page.addView(box, fullLp(12))
-            }
 
             val jKey = "journal_${monday.format(dateFmt)}"
             val savedJournal = prefs.getString(jKey, "") ?: ""
@@ -1308,14 +1406,16 @@ class MainActivity : Activity() {
 
     private fun meScreen(): ScrollView = scrollPage { page ->
         page.addView(label("わたし", 26f, white, bold = true))
-        page.addView(label("これまでの積み重ね：${doneSet().size} 個", 17f, white, bold = true))
+        // v0.7.0: points headline the page; the counts sit under it.
+        page.addView(label("ポイント：${scoreTotal()} pt", 17f, white, bold = true), fullLp(8))
+        page.addView(label("これまでの積み重ね：${doneSet().size} 個", 15f, white))
+        page.addView(label("チャレンジ枠：${slotCount()}（セット中 ${challengeSet().size}）", 15f, white))
 
         page.addView(label("卒業した習慣", 17f, white, bold = true), fullLp(24))
         val grad = badges()
         if (grad.isEmpty()) {
-            page.addView(label("まだなし。21日で5回できると、ここにバッチが並ぶ。", 13f, paleBlue))
+            page.addView(label("まだなし。", 13f, paleBlue))
         } else {
-            val restingNow = restingIds(LocalDate.now())
             grad.forEach { id ->
                 val item = MigakeruLogic.itemById(id) ?: return@forEach
                 val box = LinearLayout(this).apply {
@@ -1333,20 +1433,10 @@ class MainActivity : Activity() {
                 }
                 box.addView(dot)
                 box.addView(label("　卒業　${item.label}", 15f, ink, bold = true))
-                box.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                // v0.6.0: 戻す ends the rest early (the badge itself is
-                // permanent). Items already back in the pool show no button.
-                if (id in restingNow) {
-                    box.addView(lightButton("戻す") {
-                        saveRestUntil(restUntil() - id)
-                        Toast.makeText(this@MainActivity, "今日の候補に戻したよ", Toast.LENGTH_SHORT).show()
-                        showScreen(3)
-                    })
-                }
                 page.addView(box, fullLp(12))
             }
             page.addView(
-                label("卒業した習慣は60日お休みしたあと、様子見で候補に戻ってくるよ。バッチはここに残り続ける。", 13f, paleBlue),
+                label("前の方式で身につけた習慣の記録。これからもここに残る。", 13f, paleBlue),
                 fullLp(8),
             )
         }

@@ -60,6 +60,66 @@ object MigakeruLogic {
     fun activeItems(unlocked: Set<String>): List<Item> =
         POOL + RESERVE.filter { it.id in unlocked }
 
+    // ---------- v0.7.0: チャレンジ＆ポイント (user's new system) ----------
+    // The user picks their own challenges from the whole catalog, does
+    // them daily, and earns each challenge's points. A missed challenge
+    // costs a flat −1 regardless of its points (user's rule, 2026-11-25).
+    // Keeping every set challenge going unlocks more slots.
+
+    /** The full selectable catalog: base pool + former reserves. */
+    val CATALOG: List<Item> = POOL + RESERVE
+
+    /**
+     * Points per challenge, by how hard it is to sustain daily
+     * (user's rule: harder to keep up = more points). 1..5.
+     */
+    val POINTS: Map<String, Int> = mapOf(
+        "kintore" to 5, "walk" to 4, "protein" to 2, "bath" to 2, "sleep_prep" to 3,
+        "stretch" to 2, "stairs" to 2, "neckroll" to 1,
+        "nails" to 2, "skin" to 1, "hair" to 1, "posture" to 3, "clothes" to 2,
+        "brow" to 2, "shoes" to 3, "scent" to 1,
+        "meditation" to 3, "journal" to 2, "phone_off" to 4, "decide" to 4, "music" to 1,
+        "breath" to 1, "sky" to 1, "thanks" to 2,
+    )
+
+    fun pointsOf(id: String): Int = POINTS[id] ?: 1
+
+    /** Points actually earned on a day: completed challenges pay their points. */
+    fun dayEarned(setIds: List<String>, doneIds: Set<String>): Int =
+        setIds.filter { it in doneIds }.sumOf { pointsOf(it) }
+
+    /**
+     * The day's settlement delta: done = +points, missed = a flat −1 each,
+     * whatever the challenge (user's rule).
+     */
+    fun dayDelta(setIds: List<String>, doneIds: Set<String>): Int =
+        setIds.sumOf { if (it in doneIds) pointsOf(it) else -1 }
+
+    const val INITIAL_SLOTS = 3
+    const val MAX_SLOTS = 6
+
+    /** Consecutive all-done days needed to unlock one more slot. */
+    const val UNLOCK_STREAK_DAYS = 3
+
+    /** Slot-unlock state, advanced once per settled day. */
+    data class UnlockState(val slots: Int, val streak: Int, val pendingUnlock: Boolean)
+
+    /**
+     * Advance the unlock state by one settled day. An all-done day grows
+     * the streak; any miss resets it. Reaching the streak target with a
+     * free slot available unlocks +1 slot and flags the celebration.
+     */
+    fun applySettledDay(state: UnlockState, allDone: Boolean): UnlockState {
+        if (!allDone) return state.copy(streak = 0)
+        val streak = state.streak + 1
+        return when {
+            streak >= UNLOCK_STREAK_DAYS && state.slots < MAX_SLOTS ->
+                UnlockState(state.slots + 1, 0, pendingUnlock = true)
+            streak >= UNLOCK_STREAK_DAYS -> state.copy(streak = 0)
+            else -> state.copy(streak = streak)
+        }
+    }
+
     /** Next locked reserve of a pillar (the graduation reward), if any. */
     fun nextReserve(pillar: String, unlocked: Set<String>): Item? =
         RESERVE.firstOrNull { it.pillar == pillar && it.id !in unlocked }
@@ -222,7 +282,7 @@ object MigakeruLogic {
     )
     private val LINES_ALL_DONE = listOf(
         "全部できた！今日はもう十分だ。",
-        "3つとも完了。よく整えたね！",
+        "全部完了。よく整えたね！",
         "完璧だ。その調子でいこう。",
     )
     private val LINES_RETURN = listOf(
@@ -230,9 +290,9 @@ object MigakeruLogic {
         "久しぶり。今日もここからでいい。",
         "戻ってきてくれて嬉しいよ。",
     )
-    private val LINES_GRAD_READY = listOf(
-        "卒業できそうな習慣があるよ。下を見てみて。",
-        "身についてきた習慣があるみたいだ。",
+    private val LINES_UNLOCK_NEAR = listOf(
+        "あと1日、全部できたら枠が増えるよ。",
+        "枠まであと少し。その調子でいこう。",
     )
 
     private fun greetingPoolForHour(hour: Int): List<String> = when (hour) {
@@ -246,26 +306,27 @@ object MigakeruLogic {
     fun greetingForHour(hour: Int): String = greetingPoolForHour(hour).first()
 
     /**
-     * What the buddy says on the today screen. Priority: finishing all 3
-     * beats everything; progress beats a plain greeting; a user returning
-     * after 3+ days without a completion is welcomed back, never blamed;
-     * a pending graduation is pointed at. Lines rotate by date so they
-     * change daily but stay stable within a day.
+     * What the buddy says on the today screen. Priority: finishing the
+     * whole set beats everything; progress beats a plain greeting; a user
+     * returning after 3+ days without a completion is welcomed back,
+     * never blamed; a slot unlock one day away is pointed at. Lines
+     * rotate by date so they change daily but stay stable within a day.
      */
     fun buddyLine(
         hour: Int,
         date: LocalDate,
         doneToday: Int,
+        totalToday: Int,
         lastActive: LocalDate?,
-        graduationReady: Boolean,
+        unlockNear: Boolean,
     ): String {
         val seed = date.dayOfYear
         return when {
-            doneToday >= 3 -> LINES_ALL_DONE[seed % LINES_ALL_DONE.size]
+            totalToday > 0 && doneToday >= totalToday -> LINES_ALL_DONE[seed % LINES_ALL_DONE.size]
             doneToday > 0 -> LINES_SOME_DONE[(seed + doneToday) % LINES_SOME_DONE.size]
             lastActive != null && !lastActive.isAfter(date.minusDays(3)) ->
                 LINES_RETURN[seed % LINES_RETURN.size]
-            graduationReady -> LINES_GRAD_READY[seed % LINES_GRAD_READY.size]
+            unlockNear -> LINES_UNLOCK_NEAR[seed % LINES_UNLOCK_NEAR.size]
             else -> greetingPoolForHour(hour)[seed % greetingPoolForHour(hour).size]
         }
     }

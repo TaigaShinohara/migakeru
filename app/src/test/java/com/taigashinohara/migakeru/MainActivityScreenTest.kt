@@ -141,13 +141,27 @@ class MainActivityScreenTest {
     @Test
     fun todayScreen_rendersNonBlank() {
         val activity = launch(obDone = true)
-        assertNonBlank(activity, "今日の3つ", "からだ")
+        assertNonBlank(activity, "マイチャレンジ", "からだ", "ポイント")
     }
 
     @Test
     fun todayScreen_firstRun_showsIntroCard() {
         val activity = launch(obDone = true, introDone = false)
-        assertNonBlank(activity, "今日の3つ", "はじめに")
+        assertNonBlank(activity, "マイチャレンジ", "はじめに")
+    }
+
+    /** v0.7.0: the catalog is reached from 今日 and lists the challenges. */
+    @Test
+    fun catalogScreen_rendersNonBlank() {
+        val activity = launch(obDone = true)
+        val root = activity.window.decorView
+        val btn = allViews(root).filterIsInstance<Button>()
+            .firstOrNull { it.text.toString() == "チャレンジを選ぶ・変える" }
+        assertTrue("catalog button not found", btn != null)
+        btn!!.performClick()
+        settle(root)
+        assertNonBlank(activity, "チャレンジ", "セット中", "筋トレに行く")
+        shot(activity, "catalog")
     }
 
     @Test
@@ -169,7 +183,7 @@ class MainActivityScreenTest {
     fun meScreen_rendersNonBlank() {
         val activity = launch(obDone = true)
         clickTab(activity, "わたし")
-        assertNonBlank(activity, "卒業した習慣")
+        assertNonBlank(activity, "卒業した習慣", "ポイント")
         shot(activity, "me")
     }
 }
