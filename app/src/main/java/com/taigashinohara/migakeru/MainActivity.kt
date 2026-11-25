@@ -1096,6 +1096,12 @@ class MainActivity : Activity() {
                     layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
                 }
                 row.addView(mark)
+                // v0.7.1: the challenge's own icon rides along on 今日 too.
+                val icon = ChallengeIconView(this, item.id, MigakeruLogic.colorOf(item.id))
+                icon.layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply {
+                    setMargins(dp(10), 0, 0, 0)
+                }
+                row.addView(icon)
                 val texts = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     setPadding(dp(12), 0, 0, 0)
@@ -1162,6 +1168,8 @@ class MainActivity : Activity() {
      * v0.7.0: the catalog. All 24 challenges grouped by pillar (the
      * onboarding focus pillar first), each with its points; set/unset
      * within the slot limit. Reached from 今日， not a tab of its own.
+     * v0.7.1: a two-column wall of colourful cards — icon medallion,
+     * points pill, and a cheer line per challenge (user's request).
      */
     private fun catalogScreen(): ScrollView {
         val setIds = challengeSet()
@@ -1179,36 +1187,91 @@ class MainActivity : Activity() {
                 .sortedBy { if (it == focus) 0 else 1 }
             for (pillar in pillars) {
                 page.addView(label(pillar, 17f, white, bold = true), fullLp(24))
-                MigakeruLogic.CATALOG.filter { it.pillar == pillar }.forEach { item ->
-                    val inSet = item.id in setIds
-                    val row = LinearLayout(this).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                        background = card(inSet)
-                        setPadding(dp(16), dp(12), dp(12), dp(12))
-                        contentDescription = "${item.label}、${MigakeruLogic.pointsOf(item.id)}ポイント" +
-                            if (inSet) "、セット中" else ""
-                    }
-                    val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                    texts.addView(label(item.label, 15f, ink, bold = true))
-                    texts.addView(label("${MigakeruLogic.pointsOf(item.id)} pt", 13f, goldText, bold = true))
-                    row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    when {
-                        inSet -> row.addView(lightButton("外す") {
-                            saveChallengeSet(setIds - item.id)
+                val pillarItems = MigakeruLogic.CATALOG.filter { it.pillar == pillar }
+                for (pair in pillarItems.chunked(2)) {
+                    val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                    pair.forEachIndexed { idx, item ->
+                        val inSet = item.id in setIds
+                        val cardView = challengeCard(item, inSet, setIds.size < slots) {
+                            if (inSet) {
+                                saveChallengeSet(setIds - item.id)
+                            } else {
+                                saveChallengeSet(setIds + item.id)
+                                Toast.makeText(
+                                    this, "『${item.label}』をセットしたよ",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                            }
                             showScreen(4)
-                        })
-                        setIds.size < slots -> row.addView(lightButton("セット") {
-                            saveChallengeSet(setIds + item.id)
-                            Toast.makeText(this, "『${item.label}』をセットしたよ", Toast.LENGTH_SHORT).show()
-                            showScreen(4)
-                        })
-                        else -> row.addView(label("枠いっぱい", 13f, subOnGlass))
+                        }
+                        val lp = LinearLayout.LayoutParams(
+                            0, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
+                        )
+                        if (idx == 0) lp.rightMargin = dp(6) else lp.leftMargin = dp(6)
+                        row.addView(cardView, lp)
                     }
                     page.addView(row, fullLp(12))
                 }
             }
         }
+    }
+
+    /** One catalog card: icon medallion + points pill, name, cheer line, action. */
+    private fun challengeCard(
+        item: Item,
+        inSet: Boolean,
+        canSet: Boolean,
+        onToggle: () -> Unit,
+    ): LinearLayout {
+        val rgb = MigakeruLogic.colorOf(item.id)
+        val colorInt = Color.rgb((rgb shr 16) and 0xFF, (rgb shr 8) and 0xFF, rgb and 0xFF)
+        val lum = (0.299 * ((rgb shr 16) and 0xFF) + 0.587 * ((rgb shr 8) and 0xFF) +
+            0.114 * (rgb and 0xFF)) / 255.0
+        val cardView = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = card(inSet)
+            if (inSet) (background as GradientDrawable).setStroke(dp(2), gold)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            contentDescription = "${item.label}、${MigakeruLogic.pointsOf(item.id)}ポイント" +
+                if (inSet) "、セット中" else ""
+        }
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        top.addView(
+            ChallengeIconView(this, item.id, rgb),
+            LinearLayout.LayoutParams(dp(52), dp(52)),
+        )
+        top.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+        val pill = TextView(this).apply {
+            text = "${MigakeruLogic.pointsOf(item.id)} pt"
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(if (lum > 0.62) Color.rgb(0x24, 0x1D, 0x08) else Color.WHITE)
+            background = GradientDrawable().apply {
+                setColor(colorInt)
+                cornerRadius = dp(12).toFloat()
+            }
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+        }
+        top.addView(pill)
+        cardView.addView(top)
+        val name = label(item.label, 16f, ink, bold = true)
+        name.gravity = Gravity.CENTER_VERTICAL
+        cardView.addView(name, LinearLayout.LayoutParams(-1, dp(58)))
+        val cheer = label(MigakeruLogic.taglineOf(item.id), 13f, subOnGlass)
+        cardView.addView(cheer, LinearLayout.LayoutParams(-1, dp(46)))
+        when {
+            inSet -> cardView.addView(lightButton("外す") { onToggle() }, fullLp(8))
+            canSet -> cardView.addView(lightButton("セットする") { onToggle() }, fullLp(8))
+            else -> {
+                val full = label("枠いっぱい", 13f, subOnGlass)
+                full.gravity = Gravity.CENTER
+                cardView.addView(full, fullLp(8))
+            }
+        }
+        return cardView
     }
 
     // ---------- 鏡 ----------

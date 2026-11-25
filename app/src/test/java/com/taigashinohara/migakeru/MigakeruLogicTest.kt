@@ -319,6 +319,17 @@ class MigakeruLogicTest {
         assertEquals(1, MigakeruLogic.pointsOf("music"))
     }
 
+    /** v0.7.1: every catalog challenge has a colour and a cheer line. */
+    @Test
+    fun colorsAndTaglinesCoverCatalog() {
+        for (item in MigakeruLogic.CATALOG) {
+            assertTrue("${item.id} has no colour", MigakeruLogic.COLORS.containsKey(item.id))
+            assertTrue("${item.id} has no tagline", MigakeruLogic.taglineOf(item.id).isNotEmpty())
+        }
+        // Colours are per challenge: all 24 distinct.
+        assertEquals(24, MigakeruLogic.CATALOG.map { MigakeruLogic.colorOf(it.id) }.toSet().size)
+    }
+
     /** v0.7.0: settlement math — done pays points, a miss costs a flat 1. */
     @Test
     fun dayDeltaPaysPointsAndChargesFlatOne() {

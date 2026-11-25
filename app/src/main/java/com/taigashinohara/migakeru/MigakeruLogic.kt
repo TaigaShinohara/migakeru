@@ -84,6 +84,53 @@ object MigakeruLogic {
 
     fun pointsOf(id: String): Int = POINTS[id] ?: 1
 
+    /**
+     * v0.7.1: each challenge gets its own colour (0xRRGGBB) and a short
+     * cheer / benefit line, so picking from the catalog feels fun instead
+     * of administrative. Colours are per challenge, not per pillar — the
+     * catalog is meant to be colourful.
+     */
+    val COLORS: Map<String, Int> = mapOf(
+        "kintore" to 0xEF5350, "walk" to 0x66BB6A, "protein" to 0xFFCA28, "bath" to 0x42A5F5,
+        "sleep_prep" to 0x7E57C2, "stretch" to 0x26A69A, "stairs" to 0xFF7043, "neckroll" to 0x5C6BC0,
+        "nails" to 0xEC407A, "skin" to 0x4FC3F7, "hair" to 0xAB47BC, "posture" to 0x9CCC65,
+        "clothes" to 0xFFA726, "brow" to 0xBCAAA4, "shoes" to 0xFF8A65, "scent" to 0xBA68C8,
+        "meditation" to 0x26C6DA, "journal" to 0xFFEE58, "phone_off" to 0x7C4DFF, "decide" to 0xFF5252,
+        "music" to 0xEA80FC, "breath" to 0x80DEEA, "sky" to 0x29B6F6, "thanks" to 0xF06292,
+    )
+
+    fun colorOf(id: String): Int = COLORS[id] ?: 0xD4AF37
+
+    /** One cheer / benefit line per challenge, shown on its catalog card. */
+    val TAGLINES: Map<String, String> = mapOf(
+        "kintore" to "体が変わると、鏡が楽しくなる",
+        "walk" to "歩いた日は、夜ぐっすり",
+        "protein" to "筋肉の材料を、毎日少し",
+        "bath" to "一日の疲れを、湯で流す",
+        "sleep_prep" to "いい明日は、夜の支度から",
+        "stretch" to "ほぐれた体は、動きが軽い",
+        "stairs" to "日常がそのまま運動になる",
+        "neckroll" to "こりが取れると、顔もすっきり",
+        "nails" to "手元が整うと、所作が綺麗に",
+        "skin" to "触りたくなる肌は、毎日の1分",
+        "hair" to "髪が決まると、一日が決まる",
+        "posture" to "背筋ひとつで、見え方が変わる",
+        "clothes" to "朝の迷いが、ゼロになる",
+        "brow" to "眉で顔の印象は、大きく変わる",
+        "shoes" to "足元が綺麗な人は、信頼される",
+        "scent" to "近づいた時に、ふわっと好印象",
+        "meditation" to "頭のざわつきが、静かになる",
+        "journal" to "書くと、気持ちが整う",
+        "phone_off" to "自分の時間が、取り戻せる",
+        "decide" to "「できた」が、自信に変わる",
+        "music" to "1曲で、気分は切り替わる",
+        "breath" to "3回で、心が落ち着く",
+        "sky" to "見上げるだけで、視界が広がる",
+        "thanks" to "伝えた分だけ、関係が温まる",
+    )
+
+    fun taglineOf(id: String): String = TAGLINES[id] ?: ""
+
     /** Points actually earned on a day: completed challenges pay their points. */
     fun dayEarned(setIds: List<String>, doneIds: Set<String>): Int =
         setIds.filter { it in doneIds }.sumOf { pointsOf(it) }
