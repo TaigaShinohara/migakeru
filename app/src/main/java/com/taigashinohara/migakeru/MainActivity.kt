@@ -28,7 +28,14 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
 /**
- * Migakeru v0.5.0 — design overhaul to 黒×金×炎 design A (user's pick from
+ * Migakeru v0.6.0 — UX review v0.5.1 fixes (docs/UX_REVIEW_v0.5.1.md):
+ * U1 graduation proposals can never drain a pillar (last 2 stay), U2 a
+ * reserve item unlocks with each graduation and a graduated item rests
+ * 60 days before quietly returning, so the pool never thins for good,
+ * U3 least-recently-picked selection for every pillar (even rotation),
+ * U4 the buddy reacts to the day's state, U5 completions answer back
+ * (haptic + the buddy's line, a toast on the third).
+ * v0.5.0 — design overhaul to 黒×金×炎 design A (user's pick from
  * the 6-variant board, 2026-11-22): black base, dark glass cards with gold
  * edges, gold selected-tab pill, flame orange kept as the point colour
  * (buddy, primary buttons, completion marks). Simple Glass material rules
@@ -113,6 +120,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
+            migrateGraduationRests()
             if (!prefs.getBoolean("ob_done", false)) {
                 showOnboarding()
             } else {
@@ -290,7 +298,86 @@ class MainActivity : Activity() {
     private fun doneCountOn(date: LocalDate): Int =
         doneSet().count { it.endsWith("@${date.format(dateFmt)}") }
 
-    private fun graduated(): Set<String> = prefs.getStringSet("graduated", emptySet()) ?: emptySet()
+    /** Ever-graduated item ids — the permanent badge record （わたし画面）. */
+    private fun badges(): Set<String> = prefs.getStringSet("graduated", emptySet()) ?: emptySet()
+
+    /** Graduation rests: itemId -> the date the item returns to the pool. */
+    private fun restUntil(): Map<String, LocalDate> =
+        (prefs.getStringSet("rest_until", emptySet()) ?: emptySet()).mapNotNull { entry ->
+            val parts = entry.split("@")
+            if (parts.size != 2) return@mapNotNull null
+            runCatching { parts[0] to LocalDate.parse(parts[1], dateFmt) }.getOrNull()
+        }.toMap()
+
+    private fun saveRestUntil(map: Map<String, LocalDate>) {
+        prefs.edit()
+            .putStringSet("rest_until", map.map { "${it.key}@${it.value.format(dateFmt)}" }.toSet())
+            .apply()
+    }
+
+    /** Items currently out of the pool on a graduation rest. */
+    private fun restingIds(today: LocalDate): Set<String> =
+        restUntil().filterValues { today.isBefore(it) }.keys
+
+    /**
+     * v0.6.0 migration: up to v0.5.1 "graduated" meant permanently out of
+     * the pool. Those items keep their badge, are treated as having
+     * already served their rest (they return immediately — a fresh 60-day
+     * rest on top would narrow exactly the most diligent users' rotation
+     * for two months; U2 re-review note), and the reserves their
+     * graduations would have unlocked are unlocked retroactively, one
+     * per graduation in each pillar.
+     */
+    private fun migrateGraduationRests() {
+        if (prefs.getBoolean("rest_migrated", false)) return
+        var unlockedNow = unlocked()
+        for (pillar in listOf(Item.KARADA, Item.MITAME, Item.KOKORO)) {
+            val earned = badges().count { MigakeruLogic.itemById(it)?.pillar == pillar }
+            repeat(earned) {
+                MigakeruLogic.nextReserve(pillar, unlockedNow)?.let { unlockedNow = unlockedNow + it.id }
+            }
+        }
+        val editor = prefs.edit().putBoolean("rest_migrated", true)
+        if (unlockedNow != unlocked()) editor.putStringSet("unlocked", unlockedNow)
+        editor.apply()
+    }
+
+    /** v0.6.0 (U2): reserve items unlocked by graduations so far. */
+    private fun unlocked(): Set<String> = prefs.getStringSet("unlocked", emptySet()) ?: emptySet()
+
+    /** Completion dates per item id, for graduation checks. */
+    private fun completionsMap(): Map<String, List<LocalDate>> =
+        (MigakeruLogic.POOL + MigakeruLogic.RESERVE).associate { it.id to doneDatesFor(it.id) }
+
+    /** Most recent completion day before [today]; null if none yet. */
+    private fun lastActiveBefore(today: LocalDate): LocalDate? =
+        doneSet().mapNotNull {
+            runCatching { LocalDate.parse(it.substringAfter("@"), dateFmt) }.getOrNull()
+        }.filter { it.isBefore(today) }.maxOrNull()
+
+    /**
+     * Shared graduation action (today + mirror): the item earns its badge
+     * (permanent), rests for GRADUATION_REST_DAYS and then quietly returns
+     * to the pool (U2 re-review fix — a permanent removal could not be
+     * offset by any finite reserve), and the next reserve of the same
+     * pillar unlocks right away, so accepting a graduation always brings
+     * a fresh candidate with it.
+     */
+    private fun graduate(item: Item) {
+        val reserve = MigakeruLogic.nextReserve(item.pillar, unlocked())
+        val editor = prefs.edit().putStringSet("graduated", badges() + item.id)
+        if (reserve != null) editor.putStringSet("unlocked", unlocked() + reserve.id)
+        editor.apply()
+        saveRestUntil(
+            restUntil() + (item.id to LocalDate.now().plusDays(MigakeruLogic.GRADUATION_REST_DAYS)),
+        )
+        Toast.makeText(
+            this,
+            if (reserve != null) "卒業バッチに入れたよ。新しい候補『${reserve.label}』が増えたよ"
+            else "卒業バッチに入れたよ",
+            Toast.LENGTH_LONG,
+        ).show()
+    }
 
     private fun todayPicks(date: LocalDate): List<Item> {
         val key = "pick_${date.format(dateFmt)}"
@@ -299,14 +386,16 @@ class MainActivity : Activity() {
             val items = saved.split(",").mapNotNull { MigakeruLogic.itemById(it) }
             if (items.size == 3) return items
         }
+        // v0.6.0: the least-recently-picked rule needs a longer memory than
+        // a week — scan 90 days of saved picks to build the recent map.
         val recent = mutableMapOf<String, LocalDate>()
-        for (d in 1..7) {
+        for (d in 1..90) {
             val past = date.minusDays(d.toLong())
             val pastSaved = prefs.getString("pick_${past.format(dateFmt)}", null) ?: continue
             pastSaved.split(",").forEach { id -> recent.putIfAbsent(id, past) }
         }
         val focus = prefs.getString("ob_focus", null)?.takeIf { it.isNotEmpty() }
-        val picks = MigakeruLogic.pickToday(date, recent, graduated(), focus)
+        val picks = MigakeruLogic.pickToday(date, recent, restingIds(date), focus, unlocked())
         prefs.edit().putString(key, picks.joinToString(",") { it.id }).apply()
         return picks
     }
@@ -706,17 +795,17 @@ class MainActivity : Activity() {
                     Item.KARADA -> {
                         page.addView(label("「からだを整えたい」、あなたには。", 17f, paleBlue))
                         page.addView(label("ミガケルが、ぴったり。", 26f, white, bold = true), fullLp(8))
-                        page.addView(label("毎日、からだ・みため・こころから1つずつ。気になる『からだ』は、ひと通りまんべんなく回るよう厚く出す。", 15f, paleBlue), fullLp(8))
+                        page.addView(label("毎日、からだ・みため・こころから1つずつ。どの柱も、ひと通りまんべんなく回るように出す。", 15f, paleBlue), fullLp(8))
                     }
                     Item.MITAME -> {
                         page.addView(label("「見た目を整えたい」、あなたには。", 17f, paleBlue))
                         page.addView(label("ミガケルが、ぴったり。", 26f, white, bold = true), fullLp(8))
-                        page.addView(label("毎日、からだ・みため・こころから1つずつ。気になる『みため』は、ひと通りまんべんなく回るよう厚く出す。", 15f, paleBlue), fullLp(8))
+                        page.addView(label("毎日、からだ・みため・こころから1つずつ。どの柱も、ひと通りまんべんなく回るように出す。", 15f, paleBlue), fullLp(8))
                     }
                     else -> {
                         page.addView(label("まだ決めなくて、大丈夫。", 17f, paleBlue))
                         page.addView(label("様子見からで、ぴったり。", 26f, white, bold = true), fullLp(8))
-                        page.addView(label("毎日3つ出るから、気になったものだけやればいい。決まったら、その柱を厚くする。", 15f, paleBlue), fullLp(8))
+                        page.addView(label("毎日3つ出るから、気になったものだけやればいい。どれも、まんべんなく回ってくる。", 15f, paleBlue), fullLp(8))
                     }
                 }
                 page.addView(primaryButton("次へ") { renderObPage(3) }, fullLp(32))
@@ -881,8 +970,16 @@ class MainActivity : Activity() {
         val picks = todayPicks(today)
         return scrollPage { page ->
             // v0.4.0: hot-blooded buddy at the top-right; bubble on its left.
-            // For now the buddy only greets (time-of-day greeting).
-            val greeting = MigakeruLogic.greetingForHour(java.time.LocalTime.now().hour)
+            // v0.6.0 (U4): the bubble now reacts to the day's state —
+            // progress, a full clear, a return after a gap, a pending
+            // graduation — and the plain greetings rotate by date.
+            val greeting = MigakeruLogic.buddyLine(
+                java.time.LocalTime.now().hour,
+                today,
+                picks.count { isDone(it.id, today) },
+                lastActiveBefore(today),
+                MigakeruLogic.graduationCandidates(completionsMap(), today, restingIds(today), unlocked()).isNotEmpty(),
+            )
             val buddyRow = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -956,6 +1053,15 @@ class MainActivity : Activity() {
                     setDone(item.id, today, !wasDone)
                     if (wasDone) {
                         Toast.makeText(this, "「${item.label}」の完了を取り消したよ", Toast.LENGTH_SHORT).show()
+                    } else {
+                        // v0.6.0 (U5): a completion must answer back — the
+                        // haptic lands here and the buddy's line changes to
+                        // a reaction on the re-render; the third one gets
+                        // its own small celebration.
+                        haptic(row, true)
+                        if (picks.count { isDone(it.id, today) } == 3) {
+                            Toast.makeText(this, "今日の3つ、全部できたよ", Toast.LENGTH_SHORT).show()
+                        }
                     }
                     showScreen(0)
                 }
@@ -968,7 +1074,7 @@ class MainActivity : Activity() {
                 // K5: the button names its target and destination BEFORE the tap.
                 val target = picks.first { !isDone(it.id, today) }
                 val next = MigakeruLogic.swapCandidate(
-                    target.pillar, picks.map { it.id }.toSet(), graduated(), today.dayOfYear,
+                    target.pillar, picks.map { it.id }.toSet(), restingIds(today), today.dayOfYear, unlocked(),
                 )
                 if (next != null) {
                     val swap = ghostButton("『${target.label}』を『${next.label}』に変える") {
@@ -985,9 +1091,11 @@ class MainActivity : Activity() {
             }
 
             // K2: graduation must be visible here, not only in the mirror.
-            val readyToday = MigakeruLogic.POOL.filter {
-                it.id !in graduated() && MigakeruLogic.isGraduationReady(doneDatesFor(it.id), today)
-            }
+            // v0.6.0 (U1): proposals come from graduationCandidates, which
+            // never offers a graduation that would drain a pillar.
+            val readyToday = MigakeruLogic.graduationCandidates(
+                completionsMap(), today, restingIds(today), unlocked(),
+            )
             readyToday.forEach { item ->
                 val box = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
@@ -996,16 +1104,15 @@ class MainActivity : Activity() {
                 }
                 box.addView(label("「${item.label}」は身についてきたみたい。", 15f, ink, bold = true))
                 box.addView(primaryButton("卒業する") {
-                    prefs.edit().putStringSet("graduated", graduated() + item.id).apply()
-                    Toast.makeText(this, "卒業バッチに入れたよ", Toast.LENGTH_SHORT).show()
+                    graduate(item)
                     showScreen(0)
                 }, fullLp(12))
                 page.addView(box, fullLp(16))
             }
 
             // K2: near-graduation hint replaces the footer line (aux stays 2).
-            val nearest = MigakeruLogic.POOL
-                .filter { it.id !in graduated() }
+            val nearest = MigakeruLogic.activeItems(unlocked())
+                .filter { it.id !in restingIds(today) }
                 .map { it to MigakeruLogic.countInWindow(doneDatesFor(it.id), today) }
                 .filter { it.second in (MigakeruLogic.GRADUATION_THRESHOLD - 2) until MigakeruLogic.GRADUATION_THRESHOLD }
                 .maxByOrNull { it.second }
@@ -1090,9 +1197,9 @@ class MainActivity : Activity() {
             }
             page.addView(weekCard, fullLp(16))
 
-            val ready = MigakeruLogic.POOL.filter {
-                it.id !in graduated() && MigakeruLogic.isGraduationReady(doneDatesFor(it.id), today)
-            }
+            val ready = MigakeruLogic.graduationCandidates(
+                completionsMap(), today, restingIds(today), unlocked(),
+            )
             ready.forEach { item ->
                 val box = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
@@ -1101,8 +1208,7 @@ class MainActivity : Activity() {
                 }
                 box.addView(label("「${item.label}」は身についてきたみたい。", 15f, ink, bold = true))
                 box.addView(primaryButton("卒業する") {
-                    prefs.edit().putStringSet("graduated", graduated() + item.id).apply()
-                    Toast.makeText(this, "卒業バッチに入れたよ", Toast.LENGTH_SHORT).show()
+                    graduate(item)
                     showScreen(1)
                 }, fullLp(12))
                 page.addView(box, fullLp(12))
@@ -1205,10 +1311,11 @@ class MainActivity : Activity() {
         page.addView(label("これまでの積み重ね：${doneSet().size} 個", 17f, white, bold = true))
 
         page.addView(label("卒業した習慣", 17f, white, bold = true), fullLp(24))
-        val grad = graduated()
+        val grad = badges()
         if (grad.isEmpty()) {
             page.addView(label("まだなし。21日で5回できると、ここにバッチが並ぶ。", 13f, paleBlue))
         } else {
+            val restingNow = restingIds(LocalDate.now())
             grad.forEach { id ->
                 val item = MigakeruLogic.itemById(id) ?: return@forEach
                 val box = LinearLayout(this).apply {
@@ -1227,13 +1334,21 @@ class MainActivity : Activity() {
                 box.addView(dot)
                 box.addView(label("　卒業　${item.label}", 15f, ink, bold = true))
                 box.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                box.addView(lightButton("戻す") {
-                    prefs.edit().putStringSet("graduated", graduated() - id).apply()
-                    Toast.makeText(this@MainActivity, "今日の候補に戻したよ", Toast.LENGTH_SHORT).show()
-                    showScreen(3)
-                })
+                // v0.6.0: 戻す ends the rest early (the badge itself is
+                // permanent). Items already back in the pool show no button.
+                if (id in restingNow) {
+                    box.addView(lightButton("戻す") {
+                        saveRestUntil(restUntil() - id)
+                        Toast.makeText(this@MainActivity, "今日の候補に戻したよ", Toast.LENGTH_SHORT).show()
+                        showScreen(3)
+                    })
+                }
                 page.addView(box, fullLp(12))
             }
+            page.addView(
+                label("卒業した習慣は60日お休みしたあと、様子見で候補に戻ってくるよ。バッチはここに残り続ける。", 13f, paleBlue),
+                fullLp(8),
+            )
         }
 
         page.addView(
@@ -1256,6 +1371,10 @@ class MainActivity : Activity() {
                 }
                 .show()
         }, fullLp(24))
-        page.addView(label("ミガケル v0.5.0", 13f, paleBlue), fullLp(12))
+        // Version comes from the package itself so this label never goes stale.
+        val versionName = runCatching {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrNull() ?: ""
+        page.addView(label("ミガケル v$versionName", 13f, paleBlue), fullLp(12))
     }
 }

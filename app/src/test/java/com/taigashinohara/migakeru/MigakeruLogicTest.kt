@@ -133,6 +133,177 @@ class MigakeruLogicTest {
         assertTrue(next != null && next.id != "nails" && next.pillar == Item.MITAME)
     }
 
+    // ---- v0.6.0: UX review v0.5.1 fixes (U1/U2/U3/U4) ----
+
+    /**
+     * U1+U2 regression guard, rest model (v0.6.0 re-review fix): simulate
+     * a full year of a maximally diligent user — completes everything,
+     * accepts every graduation proposal (recomputed after each acceptance,
+     * exactly like the app) — the path that crashed the old build on day
+     * 21 and, with permanent graduation, converged to 2 alternating items
+     * per pillar. The app must keep serving 3 items, never throw, never
+     * let a pillar drop below MIN_ACTIVE_PER_PILLAR active items, and —
+     * the metric the re-review demanded — every pillar must keep serving
+     * at least 4 distinct items in any rolling 30-day window.
+     */
+    @Test
+    fun aYearOfAcceptingEveryGraduationKeepsRotationWidth() {
+        val start = LocalDate.of(2026, 11, 16) // Monday
+        val recent = mutableMapOf<String, LocalDate>()
+        val doneDates = mutableMapOf<String, MutableList<LocalDate>>()
+        val restUntil = mutableMapOf<String, LocalDate>()
+        var unlocked = emptySet<String>()
+        var graduations = 0
+        val served = mutableMapOf<String, MutableList<Pair<LocalDate, String>>>()
+        fun restingNow(date: LocalDate): Set<String> =
+            restUntil.filterValues { date.isBefore(it) }.keys
+        for (day in 0 until 365) {
+            val date = start.plusDays(day.toLong())
+            val picks = MigakeruLogic.pickToday(date, recent, restingNow(date), null, unlocked)
+            assertEquals("day $day must serve 3 items", 3, picks.size)
+            picks.forEach {
+                recent[it.id] = date
+                doneDates.getOrPut(it.id) { mutableListOf() }.add(date)
+                served.getOrPut(it.pillar) { mutableListOf() }.add(date to it.id)
+            }
+            val completions = doneDates.mapValues { it.value.toList() }
+            var candidates = MigakeruLogic.graduationCandidates(completions, date, restingNow(date), unlocked)
+            while (candidates.isNotEmpty()) {
+                val c = candidates.first()
+                restUntil[c.id] = date.plusDays(MigakeruLogic.GRADUATION_REST_DAYS)
+                graduations++
+                MigakeruLogic.nextReserve(c.pillar, unlocked)?.let { unlocked = unlocked + it.id }
+                candidates = MigakeruLogic.graduationCandidates(completions, date, restingNow(date), unlocked)
+            }
+            for (pillar in listOf(Item.KARADA, Item.MITAME, Item.KOKORO)) {
+                val active = MigakeruLogic.activeItems(unlocked)
+                    .count { it.pillar == pillar && it.id !in restingNow(date) }
+                assertTrue(
+                    "day $day: $pillar dropped to $active active items",
+                    active >= MigakeruLogic.MIN_ACTIVE_PER_PILLAR,
+                )
+            }
+            if (day >= 60) {
+                val from = date.minusDays(29)
+                for (pillar in listOf(Item.KARADA, Item.MITAME, Item.KOKORO)) {
+                    val distinct = served[pillar].orEmpty()
+                        .filter { !it.first.isBefore(from) }
+                        .map { it.second }.toSet().size
+                    assertTrue(
+                        "day $day: $pillar served only $distinct distinct items in 30 days",
+                        distinct >= 4,
+                    )
+                }
+            }
+        }
+        assertTrue("expected the diligent user to graduate often", graduations >= 10)
+        assertTrue("expected reserves to unlock", unlocked.isNotEmpty())
+    }
+
+    /** v0.6.0: all three pillars carry the same width (こころ joined at 5). */
+    @Test
+    fun everyPillarHasFiveBaseItems() {
+        for (pillar in listOf(Item.KARADA, Item.MITAME, Item.KOKORO)) {
+            assertEquals(5, MigakeruLogic.POOL.count { it.pillar == pillar })
+        }
+    }
+
+    /** U1 belt-and-braces: even with everything graduated, no throw. */
+    @Test
+    fun pickTodayNeverThrowsWhenEverythingIsGraduated() {
+        val all = (MigakeruLogic.POOL + MigakeruLogic.RESERVE).map { it.id }.toSet()
+        val picks = MigakeruLogic.pickToday(wed, emptyMap(), all, null, all)
+        assertEquals(3, picks.size)
+    }
+
+    /**
+     * U3 regression guard: over 180 days with no graduations, every item
+     * of the rotating pillars must actually show up in proportion — the
+     * old date-modulo rotation served 髪を整える only 3 times in 180 days.
+     */
+    @Test
+    fun rotationServesEveryItemEvenlyOver180Days() {
+        val start = LocalDate.of(2026, 11, 16)
+        val recent = mutableMapOf<String, LocalDate>()
+        val counts = mutableMapOf<String, Int>()
+        for (day in 0 until 180) {
+            val date = start.plusDays(day.toLong())
+            MigakeruLogic.pickToday(date, recent, emptySet()).forEach {
+                recent[it.id] = date
+                counts[it.id] = (counts[it.id] ?: 0) + 1
+            }
+        }
+        for (pillar in listOf(Item.MITAME, Item.KOKORO)) {
+            val items = MigakeruLogic.POOL.filter { it.pillar == pillar }
+            val max = items.maxOf { counts[it.id] ?: 0 }
+            for (item in items) {
+                val c = counts[item.id] ?: 0
+                assertTrue("$pillar/${item.id} served only $c times (max $max)", c * 3 >= max)
+            }
+        }
+        assertTrue("髪を整える starved: ${counts["hair"]}", (counts["hair"] ?: 0) >= 20)
+        // からだ on non-training days rotates too (kintore owns Mon/Wed/Fri).
+        for (item in MigakeruLogic.POOL.filter { it.pillar == Item.KARADA && it.id != "kintore" }) {
+            assertTrue("からだ/${item.id} served only ${counts[item.id]}", (counts[item.id] ?: 0) >= 8)
+        }
+    }
+
+    /** U2: reserves unlock in order, per pillar, and run out cleanly. */
+    @Test
+    fun reservesUnlockInOrderPerPillar() {
+        var unlocked = emptySet<String>()
+        val order = mutableListOf<String>()
+        while (true) {
+            val next = MigakeruLogic.nextReserve(Item.KOKORO, unlocked) ?: break
+            order.add(next.id)
+            unlocked = unlocked + next.id
+        }
+        assertEquals(listOf("breath", "sky", "thanks"), order)
+        assertEquals(null, MigakeruLogic.nextReserve(Item.KOKORO, unlocked))
+        // Other pillars are unaffected by こころ unlocks.
+        assertEquals("stretch", MigakeruLogic.nextReserve(Item.KARADA, unlocked)?.id)
+    }
+
+    /** U1 guard at the proposal level: the last 2 of a pillar are never proposed. */
+    @Test
+    fun graduationProposalStopsBeforePillarRunsDry() {
+        // こころ has 5 base items; rest 3 away, make a 4th ready:
+        // only 1 active would remain after, so no proposal may come out.
+        val resting = setOf("meditation", "journal", "decide")
+        val completions = mapOf("phone_off" to (0..4).map { wed.minusDays(it.toLong()) })
+        val candidates = MigakeruLogic.graduationCandidates(completions, wed, resting, emptySet())
+        assertTrue(candidates.none { it.pillar == Item.KOKORO })
+        // With 3 active remaining it IS proposed.
+        val candidates2 = MigakeruLogic.graduationCandidates(completions, wed, setOf("meditation", "journal"), emptySet())
+        assertTrue(candidates2.any { it.id == "phone_off" })
+    }
+
+    /** U4: the buddy reacts to state instead of only greeting. */
+    @Test
+    fun buddyLineReactsToState() {
+        val day = LocalDate.of(2026, 11, 24)
+        // All done beats everything.
+        val allDone = MigakeruLogic.buddyLine(9, day, 3, day.minusDays(10), graduationReady = true)
+        assertTrue(allDone.contains("十分") || allDone.contains("完了") || allDone.contains("完璧"))
+        // Some progress beats a plain greeting.
+        val some = MigakeruLogic.buddyLine(9, day, 1, day.minusDays(1), graduationReady = false)
+        assertFalse(some.startsWith("おはよう"))
+        // Returning after a gap: welcomed, never blamed.
+        val back = MigakeruLogic.buddyLine(9, day, 0, day.minusDays(5), graduationReady = false)
+        assertTrue(back.contains("おかえり") || back.contains("久しぶり") || back.contains("戻って"))
+        // A 2-day gap is not a "return" yet: plain greeting family.
+        val plain = MigakeruLogic.buddyLine(9, day, 0, day.minusDays(2), graduationReady = false)
+        assertTrue(plain.startsWith("おはよう"))
+        // Graduation pending is pointed at when nothing else applies.
+        val grad = MigakeruLogic.buddyLine(9, day, 0, day.minusDays(1), graduationReady = true)
+        assertTrue(grad.contains("卒業") || grad.contains("身について"))
+        // Greetings rotate across days instead of one fixed sentence.
+        val lines = (0..5).map {
+            MigakeruLogic.buddyLine(9, day.plusDays(it.toLong()), 0, null, graduationReady = false)
+        }
+        assertTrue("greetings did not rotate: $lines", lines.toSet().size >= 2)
+    }
+
     @Test
     fun greetingCoversAllHoursByTimeOfDay() {
         assertEquals("おはよう！今日も整えていこう！", MigakeruLogic.greetingForHour(5))
