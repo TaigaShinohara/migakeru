@@ -474,6 +474,50 @@ class ChallengeIconView(context: Context, private val itemId: String, rgb: Int) 
                 }
                 canvas.drawPath(heart, paint)
             }
+            // ---- v0.8.0: generic UI glyphs, used across every screen ----
+            "ui_coin" -> { // a coin: ring with a star punched in the middle
+                stroke(6f)
+                canvas.drawCircle(x(50f), y(50f), x(31f), paint)
+                fill()
+                val star = Path()
+                for (i in 0 until 10) {
+                    val r = if (i % 2 == 0) 17.0 else 7.5
+                    val a = Math.toRadians(-90.0 + i * 36.0)
+                    val px = 50f + (r * Math.cos(a)).toFloat()
+                    val py = 50f + (r * Math.sin(a)).toFloat()
+                    if (i == 0) star.moveTo(x(px), y(py)) else star.lineTo(x(px), y(py))
+                }
+                star.close()
+                canvas.drawPath(star, paint)
+            }
+            "ui_target" -> { // concentric rings with a bullseye
+                stroke(6.5f)
+                canvas.drawCircle(x(50f), y(50f), x(30f), paint)
+                canvas.drawCircle(x(50f), y(50f), x(18f), paint)
+                fill()
+                canvas.drawCircle(x(50f), y(50f), x(7f), paint)
+            }
+            "ui_mirror" -> { // a hand mirror with a shine
+                stroke(6f)
+                canvas.drawOval(oval(33f, 12f, 67f, 64f), paint)
+                stroke(4f)
+                canvas.drawLine(x(44f), y(27f), x(55f), y(43f), paint)
+                stroke(6f)
+                canvas.drawLine(x(50f), y(64f), x(50f), y(78f), paint)
+                canvas.drawLine(x(36f), y(84f), x(64f), y(84f), paint)
+            }
+            "ui_sparkle" -> { // a four-point sparkle
+                fill()
+                val spark = Path().apply {
+                    moveTo(x(50f), y(10f))
+                    quadTo(x(57f), y(43f), x(90f), y(50f))
+                    quadTo(x(57f), y(57f), x(50f), y(90f))
+                    quadTo(x(43f), y(57f), x(10f), y(50f))
+                    quadTo(x(43f), y(43f), x(50f), y(10f))
+                    close()
+                }
+                canvas.drawPath(spark, paint)
+            }
             else -> { // fallback: a plain star of effort — a filled circle dot
                 fill()
                 canvas.drawCircle(x(50f), y(50f), x(16f), paint)

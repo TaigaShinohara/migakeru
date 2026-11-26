@@ -525,6 +525,22 @@ class MainActivity : Activity() {
         setPadding(dp(8), dp(4), dp(8), dp(4))
     }
 
+    /**
+     * v0.8.0: screen headings get an icon medallion, so every screen
+     * opens with a bit of colour and shape instead of bare text.
+     */
+    private fun headingWithIcon(text: String, iconId: String, rgb: Int, size: Float = 26f): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        row.addView(ChallengeIconView(this, iconId, rgb), LinearLayout.LayoutParams(dp(34), dp(34)))
+        val t = label(text, size, white, bold = true)
+        t.setPadding(dp(10), 0, 0, 0)
+        row.addView(t)
+        return row
+    }
+
     private fun scrollPage(build: (LinearLayout) -> Unit): ScrollView {
         val page = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -800,6 +816,20 @@ class MainActivity : Activity() {
                 lp.gravity = Gravity.CENTER_HORIZONTAL
                 lp.topMargin = dp(32)
                 page.addView(ring, lp)
+                // v0.8.0: a teaser row of challenge medallions under the ring.
+                val teaser = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                }
+                for (id in listOf("kintore", "skin", "meditation")) {
+                    val iv = ChallengeIconView(this, id, MigakeruLogic.colorOf(id))
+                    val ilp = LinearLayout.LayoutParams(dp(44), dp(44))
+                    ilp.leftMargin = dp(6)
+                    ilp.rightMargin = dp(6)
+                    iv.layoutParams = ilp
+                    teaser.addView(iv)
+                }
+                page.addView(teaser, fullLp(24))
                 page.addView(primaryButton("次へ") { renderObPage(1) }, fullLp(32))
             }
             1 -> { // 選択（1問だけ・3択・3つ目は逃げ道）
@@ -995,6 +1025,11 @@ class MainActivity : Activity() {
                     ),
                     fullLp(8),
                 )
+                // v0.8.0: a sparkle to start on.
+                val sparkLp = LinearLayout.LayoutParams(dp(64), dp(64))
+                sparkLp.gravity = Gravity.CENTER_HORIZONTAL
+                sparkLp.topMargin = dp(24)
+                page.addView(ChallengeIconView(this, "ui_sparkle", 0xFFCA28), sparkLp)
                 page.addView(primaryButton("始める") { finishOnboarding() }, fullLp(32))
             }
         }
@@ -1037,7 +1072,7 @@ class MainActivity : Activity() {
 
             val dow = "月火水木金土日"[today.dayOfWeek.value - 1]
             page.addView(label("${today.monthValue}月${today.dayOfMonth}日（$dow）・昨日より少し好きになる", 13f, paleBlue), fullLp(8))
-            page.addView(label("マイチャレンジ", 26f, white, bold = true))
+            page.addView(headingWithIcon("マイチャレンジ", "ui_target", 0xFF7043))
 
             // v0.7.0: the score is the day's headline number — total so
             // far, plus what today has earned up to now.
@@ -1050,7 +1085,13 @@ class MainActivity : Activity() {
                 background = card()
                 setPadding(dp(16), dp(12), dp(16), dp(12))
             }
-            scoreCard.addView(label("ポイント", 15f, ink, bold = true))
+            scoreCard.addView(
+                ChallengeIconView(this, "ui_coin", 0xFFC107),
+                LinearLayout.LayoutParams(dp(38), dp(38)),
+            )
+            val scoreLabel = label("ポイント", 15f, ink, bold = true)
+            scoreLabel.setPadding(dp(10), 0, 0, 0)
+            scoreCard.addView(scoreLabel)
             scoreCard.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             scoreCard.addView(label("${scoreTotal()} pt", 20f, ink, bold = true))
             scoreCard.addView(label("　今日 +$earnedToday pt", 15f, subOnGlass))
@@ -1064,9 +1105,25 @@ class MainActivity : Activity() {
                     setPadding(dp(16), dp(16), dp(16), dp(16))
                 }
                 intro.addView(label("はじめに", 17f, ink, bold = true))
-                intro.addView(label("・チャレンジを自分で選んで、毎日こなしていく", 15f, subOnGlass))
-                intro.addView(label("・できた分だけポイント。難しいものほど高い", 15f, subOnGlass))
-                intro.addView(label("・全部続けられたら枠が増えて、もっと課せる", 15f, subOnGlass))
+                for (line in listOf(
+                    "チャレンジを自分で選んで、毎日こなしていく",
+                    "できた分だけポイント。難しいものほど高い",
+                    "全部続けられたら枠が増えて、もっと課せる",
+                )) {
+                    val lineRow = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(0, dp(3), 0, dp(3))
+                    }
+                    lineRow.addView(
+                        ChallengeIconView(this, "ui_sparkle", 0xFFCA28),
+                        LinearLayout.LayoutParams(dp(18), dp(18)),
+                    )
+                    val lt = label(line, 15f, subOnGlass)
+                    lt.setPadding(dp(8), 0, 0, 0)
+                    lineRow.addView(lt)
+                    intro.addView(lineRow)
+                }
                 intro.addView(primaryButton("はじめる") {
                     prefs.edit().putBoolean("intro_done", true).apply()
                     showScreen(0)
@@ -1141,7 +1198,12 @@ class MainActivity : Activity() {
                     background = card()
                     setPadding(dp(16), dp(16), dp(16), dp(16))
                 }
-                box.addView(label("枠が増えたよ。チャレンジをもう1つ、自分に課せる。", 15f, ink, bold = true))
+                val flagLp = LinearLayout.LayoutParams(dp(46), dp(46))
+                flagLp.gravity = Gravity.CENTER_HORIZONTAL
+                box.addView(ChallengeIconView(this, "decide", 0xFF5252), flagLp)
+                val unlockText = label("枠が増えたよ。チャレンジをもう1つ、自分に課せる。", 15f, ink, bold = true)
+                unlockText.gravity = Gravity.CENTER
+                box.addView(unlockText, fullLp(8))
                 box.addView(primaryButton("チャレンジを選ぶ") { showScreen(4) }, fullLp(12))
                 page.addView(box, fullLp(16))
             } else {
@@ -1158,7 +1220,15 @@ class MainActivity : Activity() {
                 doneToday == 0 -> "タップで完了。それだけ。"
                 else -> "あと ${items.size - doneToday} つ。急がなくていい。"
             }
-            page.addView(label(footer, 15f, white), fullLp(24))
+            val footerRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            footerRow.addView(FlameFaceView(this), LinearLayout.LayoutParams(dp(26), dp(26)))
+            val footerLabel = label(footer, 15f, white)
+            footerLabel.setPadding(dp(8), 0, 0, 0)
+            footerRow.addView(footerLabel)
+            page.addView(footerRow, fullLp(24))
         }
     }
 
@@ -1176,7 +1246,7 @@ class MainActivity : Activity() {
         val slots = slotCount()
         return scrollPage { page ->
             page.addView(ghostButton("‹ 今日にもどる") { showScreen(0) })
-            page.addView(label("チャレンジ", 26f, white, bold = true), fullLp(16))
+            page.addView(headingWithIcon("チャレンジ", "ui_sparkle", 0xFFCA28), fullLp(16))
             page.addView(label("セット中 ${setIds.size} / 枠 $slots", 17f, white, bold = true), fullLp(8))
             page.addView(
                 label("難しいチャレンジほど高ポイント。できなかった日は、1つにつき −1 pt。全部続けられたら枠が増える。", 13f, paleBlue),
@@ -1186,7 +1256,24 @@ class MainActivity : Activity() {
             val pillars = listOf(Item.KARADA, Item.MITAME, Item.KOKORO)
                 .sortedBy { if (it == focus) 0 else 1 }
             for (pillar in pillars) {
-                page.addView(label(pillar, 17f, white, bold = true), fullLp(24))
+                // v0.8.0: each pillar heading carries a representative icon.
+                val pillarIcon = when (pillar) {
+                    Item.KARADA -> "kintore"
+                    Item.MITAME -> "hair"
+                    else -> "thanks"
+                }
+                val pillarRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                pillarRow.addView(
+                    ChallengeIconView(this, pillarIcon, MigakeruLogic.colorOf(pillarIcon)),
+                    LinearLayout.LayoutParams(dp(24), dp(24)),
+                )
+                val pillarLabel = label(pillar, 17f, white, bold = true)
+                pillarLabel.setPadding(dp(8), 0, 0, 0)
+                pillarRow.addView(pillarLabel)
+                page.addView(pillarRow, fullLp(24))
                 val pillarItems = MigakeruLogic.CATALOG.filter { it.pillar == pillar }
                 for (pair in pillarItems.chunked(2)) {
                     val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -1281,7 +1368,7 @@ class MainActivity : Activity() {
         val monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
             .plusWeeks(weekOffset.toLong())
         return scrollPage { page ->
-            page.addView(label("鏡タイム", 26f, white, bold = true))
+            page.addView(headingWithIcon("鏡タイム", "ui_mirror", 0x4FC3F7))
             page.addView(label("積み重ねは、連続じゃなく「量」で見える。", 13f, paleBlue))
 
             // K3: week navigation (past weeks stay reachable, future locked).
@@ -1334,12 +1421,21 @@ class MainActivity : Activity() {
                     val set = setForDate(d)
                     if (set.isNotEmpty()) {
                         val doneIds = set.filter { isDone(it, d) }.toSet()
-                        row.addView(
-                            label(
-                                "●".repeat(doneIds.size) + "○".repeat(set.size - doneIds.size),
-                                15f, orange,
-                            ),
-                        )
+                        // v0.8.0: the day's set as mini icons — bright when
+                        // done, faded when not — instead of ●○ characters.
+                        val strip = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            contentDescription = "できた ${doneIds.size} / ${set.size}"
+                        }
+                        for (id in set) {
+                            val iv = ChallengeIconView(this, id, MigakeruLogic.colorOf(id))
+                            iv.alpha = if (id in doneIds) 1f else 0.25f
+                            val ilp = LinearLayout.LayoutParams(dp(24), dp(24))
+                            ilp.leftMargin = dp(3)
+                            iv.layoutParams = ilp
+                            strip.addView(iv)
+                        }
+                        row.addView(strip)
                         val dayPt = if (d == today) {
                             MigakeruLogic.dayEarned(set, doneIds)
                         } else {
@@ -1351,7 +1447,21 @@ class MainActivity : Activity() {
                     } else {
                         val count = doneCountOn(d)
                         weekCount += count
-                        row.addView(label("●".repeat(count), 15f, orange))
+                        // Legacy days: a row of small orange dots, one per completion.
+                        val dots = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                        repeat(count) {
+                            val dot = View(this).apply {
+                                background = GradientDrawable().apply {
+                                    shape = GradientDrawable.OVAL
+                                    setColor(orange)
+                                }
+                            }
+                            val dlp = LinearLayout.LayoutParams(dp(10), dp(10))
+                            dlp.leftMargin = dp(3)
+                            dot.layoutParams = dlp
+                            dots.addView(dot)
+                        }
+                        row.addView(dots)
                     }
                 }
                 weekCard.addView(row)
@@ -1361,7 +1471,13 @@ class MainActivity : Activity() {
                 setPadding(0, dp(8), 0, 0)
             }
             if (weekHasPoints) {
-                totalRow.addView(label(if (weekOffset == 0) "今週のポイント" else "この週のポイント", 13f, subOnGlass))
+                totalRow.addView(
+                    ChallengeIconView(this, "ui_coin", 0xFFC107),
+                    LinearLayout.LayoutParams(dp(22), dp(22)),
+                )
+                val totalLabel = label(if (weekOffset == 0) "今週のポイント" else "この週のポイント", 13f, subOnGlass)
+                totalLabel.setPadding(dp(6), 0, 0, 0)
+                totalRow.addView(totalLabel)
                 totalRow.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 totalRow.addView(label(signedPt(weekPoints), 17f, ink, bold = true))
             } else {
@@ -1419,25 +1535,26 @@ class MainActivity : Activity() {
 
     // ---------- 図鑑 ----------
 
-    private data class Guide(val title: String, val body: String)
+    /** v0.8.0: each guide borrows the icon of its closest challenge. */
+    private data class Guide(val title: String, val body: String, val icon: String)
 
     private val guides = listOf(
-        Guide("爪と手", "爪は短く清潔に。手は顔と同じくらい見られている。保湿までが1セット。"),
-        Guide("肌の保湿", "洗顔のあと1分以内に保湿。量より「毎日同じ手順」が効く。"),
-        Guide("髪の整え方", "寝ぐせは濡らして乾かし直すのが最短。整髪料は米粒ほどから。"),
-        Guide("香りは控えめに", "香水は1プッシュ、近くでだけ分かるくらいが「整っている」。"),
-        Guide("姿勢", "耳と肩が縦に並ぶ位置。壁に背中をつけて30秒で感覚を戻す。"),
-        Guide("歩き方", "視線は少し遠く、歩幅は普段より少しだけ大きく。"),
-        Guide("声と目線", "話すときは相手の目を見て、語尾まではっきり。速さはゆっくりめ。"),
-        Guide("寝る前1時間", "画面を置いて、照明を落とす。眠りの質は夜の過ごし方で決まる。"),
-        Guide("朝の光", "起きたらカーテンを開けて光を浴びる。体内時計のリセットボタン。"),
-        Guide("冷水の使い方", "シャワーの最後30秒だけ冷水に。無理のない範囲で目を覚ます。"),
-        Guide("スマホとの距離", "通知はまとめて見る。手の届かない場所に置く時間が集中を作る。"),
-        Guide("決めたことを守る", "小さく決めて、必ず守る。守れた回数が自信の正体。"),
+        Guide("爪と手", "爪は短く清潔に。手は顔と同じくらい見られている。保湿までが1セット。", "nails"),
+        Guide("肌の保湿", "洗顔のあと1分以内に保湿。量より「毎日同じ手順」が効く。", "skin"),
+        Guide("髪の整え方", "寝ぐせは濡らして乾かし直すのが最短。整髪料は米粒ほどから。", "hair"),
+        Guide("香りは控えめに", "香水は1プッシュ、近くでだけ分かるくらいが「整っている」。", "scent"),
+        Guide("姿勢", "耳と肩が縦に並ぶ位置。壁に背中をつけて30秒で感覚を戻す。", "posture"),
+        Guide("歩き方", "視線は少し遠く、歩幅は普段より少しだけ大きく。", "walk"),
+        Guide("声と目線", "話すときは相手の目を見て、語尾まではっきり。速さはゆっくりめ。", "brow"),
+        Guide("寝る前1時間", "画面を置いて、照明を落とす。眠りの質は夜の過ごし方で決まる。", "sleep_prep"),
+        Guide("朝の光", "起きたらカーテンを開けて光を浴びる。体内時計のリセットボタン。", "sky"),
+        Guide("冷水の使い方", "シャワーの最後30秒だけ冷水に。無理のない範囲で目を覚ます。", "bath"),
+        Guide("スマホとの距離", "通知はまとめて見る。手の届かない場所に置く時間が集中を作る。", "phone_off"),
+        Guide("決めたことを守る", "小さく決めて、必ず守る。守れた回数が自信の正体。", "decide"),
     )
 
     private fun guideScreen(): ScrollView = scrollPage { page ->
-        page.addView(label("整え図鑑", 26f, white, bold = true))
+        page.addView(headingWithIcon("整え図鑑", "journal", 0x66BB6A))
         page.addView(label("題名をタップすると、その1枚だけ開く。", 13f, paleBlue))
         guides.forEachIndexed { i, g ->
             val open = openGuide == i
@@ -1451,7 +1568,13 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            head.addView(label(g.title, 17f, ink, bold = true))
+            head.addView(
+                ChallengeIconView(this, g.icon, MigakeruLogic.colorOf(g.icon)),
+                LinearLayout.LayoutParams(dp(30), dp(30)),
+            )
+            val guideTitle = label(g.title, 17f, ink, bold = true)
+            guideTitle.setPadding(dp(10), 0, 0, 0)
+            head.addView(guideTitle)
             head.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             head.addView(label(if (open) "−" else "＋", 17f, subOnGlass, bold = true))
             box.addView(head)
@@ -1468,11 +1591,30 @@ class MainActivity : Activity() {
     // ---------- わたし ----------
 
     private fun meScreen(): ScrollView = scrollPage { page ->
-        page.addView(label("わたし", 26f, white, bold = true))
+        page.addView(headingWithIcon("わたし", "posture", 0xEC407A))
         // v0.7.0: points headline the page; the counts sit under it.
-        page.addView(label("ポイント：${scoreTotal()} pt", 17f, white, bold = true), fullLp(8))
-        page.addView(label("これまでの積み重ね：${doneSet().size} 個", 15f, white))
-        page.addView(label("チャレンジ枠：${slotCount()}（セット中 ${challengeSet().size}）", 15f, white))
+        // v0.8.0: the three stats become icon rows in one card.
+        val stats = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = card()
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        fun statRow(iconId: String, rgb: Int, text: String, bold: Boolean) {
+            val r = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(5), 0, dp(5))
+            }
+            r.addView(ChallengeIconView(this, iconId, rgb), LinearLayout.LayoutParams(dp(30), dp(30)))
+            val t = label(text, 15f, ink, bold = bold)
+            t.setPadding(dp(10), 0, 0, 0)
+            r.addView(t)
+            stats.addView(r)
+        }
+        statRow("ui_coin", 0xFFC107, "ポイント：${scoreTotal()} pt", bold = true)
+        statRow("stairs", MigakeruLogic.colorOf("stairs"), "これまでの積み重ね：${doneSet().size} 個", bold = false)
+        statRow("decide", MigakeruLogic.colorOf("decide"), "チャレンジ枠：${slotCount()}（セット中 ${challengeSet().size}）", bold = false)
+        page.addView(stats, fullLp(12))
 
         page.addView(label("卒業した習慣", 17f, white, bold = true), fullLp(24))
         val grad = badges()
@@ -1487,15 +1629,14 @@ class MainActivity : Activity() {
                     background = card()
                     setPadding(dp(16), dp(12), dp(12), dp(12))
                 }
-                val dot = View(this).apply {
-                    background = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(orange)
-                    }
-                    layoutParams = LinearLayout.LayoutParams(dp(8), dp(8))
-                }
-                box.addView(dot)
-                box.addView(label("　卒業　${item.label}", 15f, ink, bold = true))
+                // v0.8.0: the graduated habit shows its own icon, not a dot.
+                box.addView(
+                    ChallengeIconView(this, item.id, MigakeruLogic.colorOf(item.id)),
+                    LinearLayout.LayoutParams(dp(30), dp(30)),
+                )
+                val gradLabel = label("卒業　${item.label}", 15f, ink, bold = true)
+                gradLabel.setPadding(dp(10), 0, 0, 0)
+                box.addView(gradLabel)
                 page.addView(box, fullLp(12))
             }
             page.addView(
