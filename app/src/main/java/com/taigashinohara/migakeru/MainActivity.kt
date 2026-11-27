@@ -1344,11 +1344,17 @@ class MainActivity : Activity() {
         }
         top.addView(pill)
         cardView.addView(top)
+        // v0.9.0 (real-device report): fixed dp heights clipped the text
+        // mid-glyph on devices with a larger font size — text is sp and
+        // grows, dp heights do not. Minimum heights keep the tidy look
+        // at the standard font size and grow when the text needs room.
         val name = label(item.label, 16f, ink, bold = true)
         name.gravity = Gravity.CENTER_VERTICAL
-        cardView.addView(name, LinearLayout.LayoutParams(-1, dp(58)))
+        name.minimumHeight = dp(58)
+        cardView.addView(name, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         val cheer = label(MigakeruLogic.taglineOf(item.id), 13f, subOnGlass)
-        cardView.addView(cheer, LinearLayout.LayoutParams(-1, dp(46)))
+        cheer.minimumHeight = dp(46)
+        cardView.addView(cheer, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         when {
             inSet -> cardView.addView(lightButton("外す") { onToggle() }, fullLp(8))
             canSet -> cardView.addView(lightButton("セットする") { onToggle() }, fullLp(8))

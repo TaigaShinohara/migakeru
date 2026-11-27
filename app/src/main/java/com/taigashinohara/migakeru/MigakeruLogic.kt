@@ -53,8 +53,40 @@ object MigakeruLogic {
         Item("thanks", Item.KOKORO, "ありがとうを伝える"),
     )
 
+    /**
+     * v0.9.0: the catalog doubles (user's request) — 24 more challenges,
+     * 8 per pillar, appended after the original 24 so existing order
+     * (and any set built from it) is untouched.
+     */
+    val EXTRA: List<Item> = listOf(
+        Item("squat", Item.KARADA, "スクワット10回"),
+        Item("pushup", Item.KARADA, "腕立て5回"),
+        Item("plank", Item.KARADA, "プランク30秒"),
+        Item("radio", Item.KARADA, "ラジオ体操をする"),
+        Item("water", Item.KARADA, "水をコップ1杯飲む"),
+        Item("abs", Item.KARADA, "腹筋10回"),
+        Item("weigh", Item.KARADA, "体重をはかる"),
+        Item("eyes", Item.KARADA, "目を休ませる"),
+        Item("teeth", Item.MITAME, "歯を丁寧にみがく"),
+        Item("smile", Item.MITAME, "笑顔を3回つくる"),
+        Item("sunscreen", Item.MITAME, "日焼け止めを塗る"),
+        Item("lips", Item.MITAME, "唇をケアする"),
+        Item("mirror_check", Item.MITAME, "鏡で全身をチェック"),
+        Item("deodorant", Item.MITAME, "汗・においケアをする"),
+        Item("accessory", Item.MITAME, "アクセサリーを1つ着ける"),
+        Item("iron", Item.MITAME, "服のしわを伸ばす"),
+        Item("reading", Item.KOKORO, "本を10分読む"),
+        Item("tidy", Item.KOKORO, "5分だけ片づける"),
+        Item("message", Item.KOKORO, "誰かにひと言送る"),
+        Item("laugh", Item.KOKORO, "声を出して笑う"),
+        Item("sing", Item.KOKORO, "歌を1曲歌う"),
+        Item("tea", Item.KOKORO, "お茶をゆっくり飲む"),
+        Item("declare", Item.KOKORO, "目標を声に出す"),
+        Item("self_praise", Item.KOKORO, "自分を1つ褒める"),
+    )
+
     fun itemById(id: String): Item? =
-        (POOL + RESERVE).firstOrNull { it.id == id }
+        CATALOG.firstOrNull { it.id == id }
 
     /** Items the user can currently be served: base pool + unlocked reserves. */
     fun activeItems(unlocked: Set<String>): List<Item> =
@@ -66,8 +98,8 @@ object MigakeruLogic {
     // costs a flat −1 regardless of its points (user's rule, 2026-11-25).
     // Keeping every set challenge going unlocks more slots.
 
-    /** The full selectable catalog: base pool + former reserves. */
-    val CATALOG: List<Item> = POOL + RESERVE
+    /** The full selectable catalog: base pool + former reserves + v0.9.0 extras. */
+    val CATALOG: List<Item> = POOL + RESERVE + EXTRA
 
     /**
      * Points per challenge, by how hard it is to sustain daily
@@ -80,6 +112,13 @@ object MigakeruLogic {
         "brow" to 2, "shoes" to 3, "scent" to 1,
         "meditation" to 3, "journal" to 2, "phone_off" to 4, "decide" to 4, "music" to 1,
         "breath" to 1, "sky" to 1, "thanks" to 2,
+        // v0.9.0 extras.
+        "squat" to 2, "pushup" to 3, "plank" to 3, "radio" to 2, "water" to 1,
+        "abs" to 2, "weigh" to 1, "eyes" to 1,
+        "teeth" to 1, "smile" to 2, "sunscreen" to 2, "lips" to 1, "mirror_check" to 2,
+        "deodorant" to 2, "accessory" to 1, "iron" to 2,
+        "reading" to 2, "tidy" to 2, "message" to 2, "laugh" to 1, "sing" to 2,
+        "tea" to 1, "declare" to 3, "self_praise" to 2,
     )
 
     fun pointsOf(id: String): Int = POINTS[id] ?: 1
@@ -97,6 +136,13 @@ object MigakeruLogic {
         "clothes" to 0xFFA726, "brow" to 0xBCAAA4, "shoes" to 0xFF8A65, "scent" to 0xBA68C8,
         "meditation" to 0x26C6DA, "journal" to 0xFFEE58, "phone_off" to 0x7C4DFF, "decide" to 0xFF5252,
         "music" to 0xEA80FC, "breath" to 0x80DEEA, "sky" to 0x29B6F6, "thanks" to 0xF06292,
+        // v0.9.0 extras — all distinct from the first 24 and each other.
+        "squat" to 0x8D6E63, "pushup" to 0x78909C, "plank" to 0xD4E157, "radio" to 0xFFD740,
+        "water" to 0x40C4FF, "abs" to 0xFFAB40, "weigh" to 0xB2FF59, "eyes" to 0xA7FFEB,
+        "teeth" to 0xECEFF1, "smile" to 0xFFCC80, "sunscreen" to 0xFFE082, "lips" to 0xF48FB1,
+        "mirror_check" to 0x90CAF9, "deodorant" to 0xA5D6A7, "accessory" to 0xCE93D8, "iron" to 0xB39DDB,
+        "reading" to 0xFFECB3, "tidy" to 0xC5E1A5, "message" to 0x81D4FA, "laugh" to 0xFFF59D,
+        "sing" to 0xE1BEE7, "tea" to 0xA1887F, "declare" to 0xEF9A9A, "self_praise" to 0xF8BBD0,
     )
 
     fun colorOf(id: String): Int = COLORS[id] ?: 0xD4AF37
@@ -127,6 +173,31 @@ object MigakeruLogic {
         "breath" to "3回で、心が落ち着く",
         "sky" to "見上げるだけで、視界が広がる",
         "thanks" to "伝えた分だけ、関係が温まる",
+        // v0.9.0 extras.
+        "squat" to "小さな負荷が、脚を作る",
+        "pushup" to "胸と腕に、効く実感",
+        "plank" to "体幹が、姿勢を支える",
+        "radio" to "全身が、目覚める",
+        "water" to "うるおいは、内側から",
+        "abs" to "お腹まわりが、引き締まる",
+        "weigh" to "数字が見えると、整えやすい",
+        "eyes" to "遠くを見て、目をリセット",
+        "teeth" to "口元が清潔だと、笑顔に自信",
+        "smile" to "笑顔は、練習で育つ",
+        "sunscreen" to "未来の肌を、今日守る",
+        "lips" to "唇がうるおうと、顔が明るい",
+        "mirror_check" to "出かける前の、30秒",
+        "deodorant" to "近くても、安心な自分に",
+        "accessory" to "1つの小物で、印象が締まる",
+        "iron" to "しわのない服は、それだけで清潔感",
+        "reading" to "10分で、頭に新しい景色",
+        "tidy" to "空間が整うと、心も整う",
+        "message" to "ひと言が、つながりを温める",
+        "laugh" to "笑った分だけ、軽くなる",
+        "sing" to "歌うと、呼吸も気分も深くなる",
+        "tea" to "温かい一杯が、ひと息になる",
+        "declare" to "口に出すと、体が動き出す",
+        "self_praise" to "褒めた分だけ、自分が味方になる",
     )
 
     fun taglineOf(id: String): String = TAGLINES[id] ?: ""

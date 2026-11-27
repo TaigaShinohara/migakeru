@@ -165,6 +165,7 @@ class ChallengeIconView(context: Context, private val itemId: String, rgb: Int) 
         fun x(v: Float) = v * u
         fun y(v: Float) = v * u
         fun oval(l: Float, t: Float, r: Float, b: Float) = RectF(x(l), y(t), x(r), y(b))
+        fun rect(l: Float, t: Float, r: Float, b: Float) = RectF(x(l), y(t), x(r), y(b))
         fun fill() {
             paint.style = Paint.Style.FILL
             paint.color = glyph
@@ -474,6 +475,264 @@ class ChallengeIconView(context: Context, private val itemId: String, rgb: Int) 
                 }
                 canvas.drawPath(heart, paint)
             }
+            // ---- v0.9.0: glyphs for the 24 added challenges ----
+            "squat" -> { // a figure squatting, arms forward
+                fill()
+                canvas.drawCircle(x(50f), y(24f), x(7f), paint)
+                stroke(6f)
+                canvas.drawLine(x(50f), y(31f), x(50f), y(50f), paint)
+                canvas.drawLine(x(50f), y(38f), x(70f), y(42f), paint)
+                canvas.drawLine(x(50f), y(50f), x(35f), y(62f), paint)
+                canvas.drawLine(x(35f), y(62f), x(37f), y(78f), paint)
+                canvas.drawLine(x(50f), y(50f), x(65f), y(62f), paint)
+                canvas.drawLine(x(65f), y(62f), x(63f), y(78f), paint)
+            }
+            "pushup" -> { // a figure in push-up position
+                fill()
+                canvas.drawCircle(x(74f), y(32f), x(6.5f), paint)
+                stroke(6.5f)
+                canvas.drawLine(x(68f), y(38f), x(30f), y(56f), paint)
+                canvas.drawLine(x(56f), y(44f), x(56f), y(68f), paint)
+                canvas.drawLine(x(30f), y(56f), x(22f), y(70f), paint)
+            }
+            "plank" -> { // a straight body held on one arm
+                fill()
+                canvas.drawCircle(x(78f), y(26f), x(6.5f), paint)
+                stroke(7f)
+                canvas.drawLine(x(72f), y(32f), x(26f), y(60f), paint)
+                canvas.drawLine(x(60f), y(40f), x(60f), y(66f), paint)
+            }
+            "radio" -> { // radio calisthenics: arms up in a V
+                fill()
+                canvas.drawCircle(x(50f), y(30f), x(7f), paint)
+                stroke(6f)
+                canvas.drawLine(x(50f), y(44f), x(31f), y(22f), paint)
+                canvas.drawLine(x(50f), y(44f), x(69f), y(22f), paint)
+                canvas.drawLine(x(50f), y(44f), x(50f), y(62f), paint)
+                canvas.drawLine(x(50f), y(62f), x(39f), y(80f), paint)
+                canvas.drawLine(x(50f), y(62f), x(61f), y(80f), paint)
+            }
+            "water" -> { // a glass of water
+                stroke(6f)
+                canvas.drawLine(x(35f), y(24f), x(40f), y(76f), paint)
+                canvas.drawLine(x(65f), y(24f), x(60f), y(76f), paint)
+                canvas.drawLine(x(40f), y(76f), x(60f), y(76f), paint)
+                stroke(4f)
+                canvas.drawLine(x(37.5f), y(45f), x(62.5f), y(45f), paint)
+            }
+            "abs" -> { // a torso with a six-pack hint
+                stroke(6f)
+                canvas.drawRoundRect(rect(37f, 20f, 63f, 80f), x(10f), y(10f), paint)
+                stroke(4f)
+                canvas.drawLine(x(50f), y(28f), x(50f), y(72f), paint)
+                canvas.drawLine(x(39f), y(42f), x(61f), y(42f), paint)
+                canvas.drawLine(x(39f), y(58f), x(61f), y(58f), paint)
+            }
+            "weigh" -> { // a bathroom scale with a dial
+                stroke(6f)
+                canvas.drawRoundRect(rect(29f, 28f, 71f, 80f), x(8f), y(8f), paint)
+                stroke(4f)
+                canvas.drawArc(oval(40f, 38f, 60f, 56f), 180f, 180f, false, paint)
+                canvas.drawLine(x(50f), y(52f), x(57f), y(43f), paint)
+            }
+            "eyes" -> { // an eye, resting open
+                stroke(6f)
+                val eye = Path().apply {
+                    moveTo(x(20f), y(50f))
+                    quadTo(x(50f), y(26f), x(80f), y(50f))
+                    quadTo(x(50f), y(74f), x(20f), y(50f))
+                    close()
+                }
+                canvas.drawPath(eye, paint)
+                fill()
+                canvas.drawCircle(x(50f), y(50f), x(8f), paint)
+            }
+            "teeth" -> { // a tooth
+                fill()
+                val tooth = Path().apply {
+                    moveTo(x(34f), y(30f))
+                    cubicTo(x(34f), y(19f), x(66f), y(19f), x(66f), y(30f))
+                    cubicTo(x(66f), y(42f), x(62f), y(45f), x(61f), y(57f))
+                    cubicTo(x(60f), y(70f), x(54f), y(73f), x(52f), y(60f))
+                    lineTo(x(48f), y(60f))
+                    cubicTo(x(46f), y(73f), x(40f), y(70f), x(39f), y(57f))
+                    cubicTo(x(38f), y(45f), x(34f), y(42f), x(34f), y(30f))
+                    close()
+                }
+                canvas.drawPath(tooth, paint)
+            }
+            "smile" -> { // a smiling face
+                stroke(6f)
+                canvas.drawCircle(x(50f), y(50f), x(27f), paint)
+                fill()
+                canvas.drawCircle(x(40f), y(44f), x(3.5f), paint)
+                canvas.drawCircle(x(60f), y(44f), x(3.5f), paint)
+                stroke(5f)
+                canvas.drawArc(oval(36f, 38f, 64f, 68f), 25f, 130f, false, paint)
+            }
+            "sunscreen" -> { // a tube with a sun on it
+                stroke(6f)
+                canvas.drawRect(rect(40f, 34f, 60f, 74f), paint)
+                fill()
+                canvas.drawRect(rect(44f, 24f, 56f, 34f), paint)
+                canvas.drawCircle(x(50f), y(54f), x(7f), paint)
+            }
+            "lips" -> { // lips: an M-shaped top edge and a lip line,
+                // otherwise the silhouette reads as a moustache.
+                fill()
+                val lips = Path().apply {
+                    moveTo(x(21f), y(50f))
+                    quadTo(x(35f), y(31f), x(50f), y(45f))
+                    quadTo(x(65f), y(31f), x(79f), y(50f))
+                    quadTo(x(65f), y(65f), x(50f), y(59f))
+                    quadTo(x(35f), y(65f), x(21f), y(50f))
+                    close()
+                }
+                canvas.drawPath(lips, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 3f * u
+                paint.strokeCap = Paint.Cap.ROUND
+                paint.color = bg
+                canvas.drawLine(x(31f), y(51f), x(69f), y(51f), paint)
+            }
+            "deodorant" -> { // a spray can with puffs
+                stroke(6f)
+                canvas.drawRoundRect(rect(40f, 36f, 58f, 78f), x(6f), y(6f), paint)
+                fill()
+                canvas.drawRect(rect(45f, 26f, 53f, 36f), paint)
+                canvas.drawCircle(x(68f), y(28f), x(3f), paint)
+                canvas.drawCircle(x(75f), y(38f), x(3f), paint)
+                canvas.drawCircle(x(67f), y(44f), x(2.5f), paint)
+            }
+            "accessory" -> { // a wristwatch
+                stroke(6f)
+                canvas.drawLine(x(43f), y(16f), x(43f), y(35f), paint)
+                canvas.drawLine(x(57f), y(16f), x(57f), y(35f), paint)
+                canvas.drawLine(x(43f), y(65f), x(43f), y(84f), paint)
+                canvas.drawLine(x(57f), y(65f), x(57f), y(84f), paint)
+                canvas.drawCircle(x(50f), y(50f), x(16f), paint)
+                stroke(4f)
+                canvas.drawLine(x(50f), y(50f), x(50f), y(41f), paint)
+                canvas.drawLine(x(50f), y(50f), x(58f), y(54f), paint)
+            }
+            "iron" -> { // an iron
+                fill()
+                val body = Path().apply {
+                    moveTo(x(22f), y(68f))
+                    lineTo(x(78f), y(68f))
+                    lineTo(x(78f), y(59f))
+                    quadTo(x(62f), y(44f), x(42f), y(46f))
+                    lineTo(x(28f), y(52f))
+                    close()
+                }
+                canvas.drawPath(body, paint)
+                stroke(5f)
+                canvas.drawLine(x(42f), y(38f), x(62f), y(38f), paint)
+                canvas.drawLine(x(42f), y(38f), x(42f), y(45f), paint)
+                canvas.drawLine(x(62f), y(38f), x(62f), y(46f), paint)
+            }
+            "reading" -> { // an open book
+                stroke(6f)
+                val book = Path().apply {
+                    moveTo(x(50f), y(35f))
+                    cubicTo(x(40f), y(27f), x(28f), y(26f), x(21f), y(29f))
+                    lineTo(x(21f), y(73f))
+                    cubicTo(x(28f), y(70f), x(40f), y(71f), x(50f), y(79f))
+                    cubicTo(x(60f), y(71f), x(72f), y(70f), x(79f), y(73f))
+                    lineTo(x(79f), y(29f))
+                    cubicTo(x(72f), y(26f), x(60f), y(27f), x(50f), y(35f))
+                    close()
+                }
+                canvas.drawPath(book, paint)
+                stroke(4f)
+                canvas.drawLine(x(50f), y(35f), x(50f), y(79f), paint)
+            }
+            "tidy" -> { // a box, tidied away, with a sparkle
+                stroke(6f)
+                canvas.drawRect(rect(28f, 44f, 72f, 78f), paint)
+                canvas.drawLine(x(23f), y(44f), x(77f), y(44f), paint)
+                fill()
+                val sp = Path().apply {
+                    moveTo(x(67f), y(16f))
+                    lineTo(x(70.5f), y(24.5f))
+                    lineTo(x(79f), y(28f))
+                    lineTo(x(70.5f), y(31.5f))
+                    lineTo(x(67f), y(40f))
+                    lineTo(x(63.5f), y(31.5f))
+                    lineTo(x(55f), y(28f))
+                    lineTo(x(63.5f), y(24.5f))
+                    close()
+                }
+                canvas.drawPath(sp, paint)
+            }
+            "message" -> { // a speech bubble with three dots
+                stroke(6f)
+                canvas.drawRoundRect(rect(25f, 27f, 75f, 59f), x(10f), y(10f), paint)
+                fill()
+                val tail = Path().apply {
+                    moveTo(x(36f), y(57f))
+                    lineTo(x(36f), y(73f))
+                    lineTo(x(53f), y(59f))
+                    close()
+                }
+                canvas.drawPath(tail, paint)
+                canvas.drawCircle(x(38f), y(43f), x(3.2f), paint)
+                canvas.drawCircle(x(50f), y(43f), x(3.2f), paint)
+                canvas.drawCircle(x(62f), y(43f), x(3.2f), paint)
+            }
+            "laugh" -> { // a laughing face with an open mouth
+                stroke(6f)
+                canvas.drawCircle(x(50f), y(50f), x(27f), paint)
+                stroke(4.5f)
+                canvas.drawArc(oval(33f, 38f, 45f, 48f), 180f, 180f, false, paint)
+                canvas.drawArc(oval(55f, 38f, 67f, 48f), 180f, 180f, false, paint)
+                fill()
+                canvas.drawArc(oval(38f, 48f, 62f, 72f), 0f, 180f, false, paint)
+            }
+            "sing" -> { // a microphone
+                stroke(6f)
+                canvas.drawRoundRect(rect(43f, 16f, 57f, 50f), x(7f), y(7f), paint)
+                canvas.drawArc(oval(33f, 28f, 67f, 64f), 0f, 180f, false, paint)
+                canvas.drawLine(x(50f), y(64f), x(50f), y(78f), paint)
+                canvas.drawLine(x(37f), y(80f), x(63f), y(80f), paint)
+            }
+            "tea" -> { // a cup with steam
+                stroke(6f)
+                val cup = Path().apply {
+                    moveTo(x(29f), y(38f))
+                    lineTo(x(71f), y(38f))
+                    lineTo(x(66f), y(68f))
+                    lineTo(x(34f), y(68f))
+                    close()
+                }
+                canvas.drawPath(cup, paint)
+                canvas.drawArc(oval(66f, 42f, 82f, 60f), -60f, 120f, false, paint)
+                stroke(4f)
+                canvas.drawArc(oval(38f, 14f, 48f, 32f), 270f, 120f, false, paint)
+                canvas.drawArc(oval(54f, 14f, 64f, 32f), 270f, 120f, false, paint)
+            }
+            "declare" -> { // a megaphone with sound arcs
+                fill()
+                val cone = Path().apply {
+                    moveTo(x(26f), y(42f))
+                    lineTo(x(60f), y(29f))
+                    lineTo(x(60f), y(71f))
+                    lineTo(x(26f), y(58f))
+                    close()
+                }
+                canvas.drawPath(cone, paint)
+                canvas.drawRect(rect(34f, 58f, 43f, 76f), paint)
+                stroke(4.5f)
+                canvas.drawArc(oval(62f, 33f, 86f, 67f), -55f, 110f, false, paint)
+            }
+            "self_praise" -> { // a medal: a job well done, by yourself
+                stroke(6f)
+                canvas.drawCircle(x(50f), y(42f), x(15f), paint)
+                canvas.drawLine(x(40f), y(53f), x(34f), y(76f), paint)
+                canvas.drawLine(x(60f), y(53f), x(66f), y(76f), paint)
+                fill()
+                canvas.drawCircle(x(50f), y(42f), x(5.5f), paint)
+            }
             // ---- v0.8.0: generic UI glyphs, used across every screen ----
             "ui_coin" -> { // a coin: ring with a star punched in the middle
                 stroke(6f)
@@ -497,7 +756,7 @@ class ChallengeIconView(context: Context, private val itemId: String, rgb: Int) 
                 fill()
                 canvas.drawCircle(x(50f), y(50f), x(7f), paint)
             }
-            "ui_mirror" -> { // a hand mirror with a shine
+            "mirror_check", "ui_mirror" -> { // a hand mirror with a shine
                 stroke(6f)
                 canvas.drawOval(oval(33f, 12f, 67f, 64f), paint)
                 stroke(4f)

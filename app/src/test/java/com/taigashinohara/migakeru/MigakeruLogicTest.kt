@@ -307,7 +307,7 @@ class MigakeruLogicTest {
     /** v0.7.0: every catalog challenge carries points in 1..5. */
     @Test
     fun pointsTableCoversCatalog() {
-        assertEquals(24, MigakeruLogic.CATALOG.size)
+        assertEquals(48, MigakeruLogic.CATALOG.size)
         for (item in MigakeruLogic.CATALOG) {
             val p = MigakeruLogic.pointsOf(item.id)
             assertTrue("${item.id} points out of range: $p", p in 1..5)
@@ -326,8 +326,8 @@ class MigakeruLogicTest {
             assertTrue("${item.id} has no colour", MigakeruLogic.COLORS.containsKey(item.id))
             assertTrue("${item.id} has no tagline", MigakeruLogic.taglineOf(item.id).isNotEmpty())
         }
-        // Colours are per challenge: all 24 distinct.
-        assertEquals(24, MigakeruLogic.CATALOG.map { MigakeruLogic.colorOf(it.id) }.toSet().size)
+        // Colours are per challenge: all 48 distinct.
+        assertEquals(48, MigakeruLogic.CATALOG.map { MigakeruLogic.colorOf(it.id) }.toSet().size)
     }
 
     /** v0.7.0: settlement math — done pays points, a miss costs a flat 1. */
