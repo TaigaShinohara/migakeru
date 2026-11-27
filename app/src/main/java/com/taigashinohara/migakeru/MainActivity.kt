@@ -18,6 +18,7 @@ import android.view.WindowInsets
 import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -1252,6 +1253,16 @@ class MainActivity : Activity() {
                 label("難しいチャレンジほど高ポイント。できなかった日は、1つにつき −1 pt。全部続けられたら枠が増える。", 13f, paleBlue),
                 fullLp(4),
             )
+            // v0.10.0: genre shelves — chips switch the catalog between
+            // the pillar view (ぜんぶ) and one cross-cutting genre.
+            page.addView(genreChipRow(), fullLp(14))
+            val genre = MigakeruLogic.genreById(prefs.getString("catalog_genre", "") ?: "")
+            if (genre != null) {
+                page.addView(label(genre.title, 17f, white, bold = true), fullLp(16))
+                page.addView(label(genre.caption, 13f, paleBlue), fullLp(4))
+                addCardGrid(page, genre.itemIds.mapNotNull { MigakeruLogic.itemById(it) }, setIds, slots)
+                return@scrollPage
+            }
             val focus = prefs.getString("ob_focus", null)?.takeIf { it.isNotEmpty() }
             val pillars = listOf(Item.KARADA, Item.MITAME, Item.KOKORO)
                 .sortedBy { if (it == focus) 0 else 1 }
@@ -1274,36 +1285,91 @@ class MainActivity : Activity() {
                 pillarLabel.setPadding(dp(8), 0, 0, 0)
                 pillarRow.addView(pillarLabel)
                 page.addView(pillarRow, fullLp(24))
-                val pillarItems = MigakeruLogic.CATALOG.filter { it.pillar == pillar }
-                for (pair in pillarItems.chunked(2)) {
-                    val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-                    pair.forEachIndexed { idx, item ->
-                        val inSet = item.id in setIds
-                        val cardView = challengeCard(item, inSet, setIds.size < slots) {
-                            if (inSet) {
-                                saveChallengeSet(setIds - item.id)
-                            } else {
-                                saveChallengeSet(setIds + item.id)
-                                Toast.makeText(
-                                    this, "『${item.label}』をセットしたよ",
-                                    Toast.LENGTH_SHORT,
-                                ).show()
-                            }
-                            showScreen(4)
-                        }
-                        val lp = LinearLayout.LayoutParams(
-                            0, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
-                        )
-                        if (idx == 0) lp.rightMargin = dp(6) else lp.leftMargin = dp(6)
-                        row.addView(cardView, lp)
-                    }
-                    page.addView(row, fullLp(12))
-                }
+                addCardGrid(page, MigakeruLogic.CATALOG.filter { it.pillar == pillar }, setIds, slots)
             }
         }
     }
 
     /** One catalog card: icon medallion + points pill, name, cheer line, action. */
+    /** v0.10.0: the 2-column card grid, shared by pillar and genre views. */
+    private fun addCardGrid(page: LinearLayout, items: List<Item>, setIds: List<String>, slots: Int) {
+        for (pair in items.chunked(2)) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            pair.forEachIndexed { idx, item ->
+                val inSet = item.id in setIds
+                val cardView = challengeCard(item, inSet, setIds.size < slots) {
+                    if (inSet) {
+                        saveChallengeSet(setIds - item.id)
+                    } else {
+                        saveChallengeSet(setIds + item.id)
+                        Toast.makeText(
+                            this, "『${item.label}』をセットしたよ",
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                    showScreen(4)
+                }
+                val lp = LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
+                )
+                if (idx == 0) lp.rightMargin = dp(6) else lp.leftMargin = dp(6)
+                row.addView(cardView, lp)
+            }
+            page.addView(row, fullLp(12))
+        }
+    }
+
+    /** v0.10.0: a horizontally scrolling row of genre filter chips. */
+    private fun genreChipRow(): HorizontalScrollView {
+        val current = prefs.getString("catalog_genre", "") ?: ""
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        var selectedChip: TextView? = null
+        fun chip(id: String, title: String) {
+            val selected = current == id
+            val tv = TextView(this).apply {
+                text = title
+                textSize = 13.5f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(if (selected) goldDark else ink)
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(16).toFloat()
+                    if (selected) {
+                        setColor(gold)
+                    } else {
+                        setColor(Color.TRANSPARENT)
+                        setStroke(dp(1), gold)
+                    }
+                }
+                setPadding(dp(14), dp(7), dp(14), dp(7))
+                contentDescription = "ジャンル: $title"
+                setOnClickListener {
+                    prefs.edit().putString("catalog_genre", id).apply()
+                    showScreen(4)
+                }
+            }
+            if (selected) selectedChip = tv
+            row.addView(
+                tv,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { rightMargin = dp(8) },
+            )
+        }
+        chip("", "ぜんぶ")
+        for (g in MigakeruLogic.GENRES) chip(g.id, g.title)
+        return HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+            // Keep the selected chip in view after a rebuild — without
+            // this the row resets to the start and the active genre's
+            // chip can sit off-screen.
+            selectedChip?.let { sel ->
+                post { scrollTo((sel.left - dp(8)).coerceAtLeast(0), 0) }
+            }
+        }
+    }
+
     private fun challengeCard(
         item: Item,
         inSet: Boolean,

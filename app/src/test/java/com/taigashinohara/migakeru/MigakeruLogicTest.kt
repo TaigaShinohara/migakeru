@@ -330,6 +330,28 @@ class MigakeruLogicTest {
         assertEquals(48, MigakeruLogic.CATALOG.map { MigakeruLogic.colorOf(it.id) }.toSet().size)
     }
 
+    /** v0.10.0: genres are valid shelves and together cover the catalog. */
+    @Test
+    fun genresCoverCatalog() {
+        val catalogIds = MigakeruLogic.CATALOG.map { it.id }.toSet()
+        val covered = mutableSetOf<String>()
+        for (genre in MigakeruLogic.GENRES) {
+            assertTrue("${genre.id} is too small", genre.itemIds.size >= 5)
+            assertEquals("${genre.id} has duplicate ids", genre.itemIds.size, genre.itemIds.toSet().size)
+            for (id in genre.itemIds) {
+                assertTrue("${genre.id} names unknown challenge $id", id in catalogIds)
+                covered += id
+            }
+        }
+        assertEquals("every challenge sits on at least one shelf", catalogIds, covered)
+        // The quick shelf is exactly the 1-point challenges.
+        val quick = MigakeruLogic.genreById("quick")!!
+        assertEquals(
+            MigakeruLogic.CATALOG.filter { MigakeruLogic.pointsOf(it.id) == 1 }.map { it.id }.toSet(),
+            quick.itemIds.toSet(),
+        )
+    }
+
     /** v0.7.0: settlement math — done pays points, a miss costs a flat 1. */
     @Test
     fun dayDeltaPaysPointsAndChargesFlatOne() {

@@ -164,6 +164,25 @@ class MainActivityScreenTest {
         shot(activity, "catalog")
     }
 
+    /** v0.10.0: a genre chip filters the catalog to that shelf. */
+    @Test
+    fun catalogGenre_filtersToShelf() {
+        val activity = launch(obDone = true)
+        val root = activity.window.decorView
+        val btn = allViews(root).filterIsInstance<Button>()
+            .firstOrNull { it.text.toString() == "チャレンジを選ぶ・変える" }
+        assertTrue("catalog button not found", btn != null)
+        btn!!.performClick()
+        settle(root)
+        val chip = allViews(root).filterIsInstance<TextView>()
+            .firstOrNull { it.text.toString() == "メンタル系" }
+        assertTrue("genre chip not found", chip != null)
+        chip!!.performClick()
+        settle(root)
+        assertNonBlank(activity, "メンタル系", "ありがとうを伝える")
+        shot(activity, "catalog_genre")
+    }
+
     @Test
     fun mirrorScreen_rendersNonBlank() {
         val activity = launch(obDone = true)

@@ -202,6 +202,65 @@ object MigakeruLogic {
 
     fun taglineOf(id: String): String = TAGLINES[id] ?: ""
 
+    /**
+     * v0.10.0: genres — cross-cutting shelves over the catalog so the
+     * user can browse by angle (quick wins, movement, what health data
+     * could auto-check, mental care, grooming, morning, night) instead
+     * of only by pillar (user's request, 2026-11-27). A challenge may
+     * sit on several shelves; together they cover the whole catalog.
+     */
+    data class Genre(val id: String, val title: String, val caption: String, val itemIds: List<String>)
+
+    val GENRES: List<Genre> = listOf(
+        Genre(
+            "quick", "すぐできる系", "1ポイントの軽いものだけ。1分で終わる日にも",
+            listOf(
+                "neckroll", "skin", "hair", "scent", "music", "breath", "sky",
+                "water", "weigh", "eyes", "teeth", "lips", "accessory", "laugh", "tea",
+            ),
+        ),
+        Genre(
+            "morning", "朝にいい系", "朝のひと手間で、一日の滑り出しをよくする",
+            listOf("sky", "water", "radio", "teeth", "mirror_check", "protein", "stretch", "breath"),
+        ),
+        Genre(
+            "move", "うごかす系", "体を動かすもの。運動不足の解消に",
+            listOf(
+                "kintore", "walk", "stretch", "stairs", "posture", "neckroll",
+                "squat", "pushup", "plank", "radio", "abs",
+            ),
+        ),
+        Genre(
+            "health", "ヘルスケアで自動チェックできる系",
+            "歩数・体重・睡眠など、ヘルスケアの記録で測れるもの。自動チェックは今後の連携で",
+            listOf(
+                "walk", "stairs", "weigh", "sleep_prep", "meditation",
+                "kintore", "squat", "pushup", "plank", "radio", "abs",
+            ),
+        ),
+        Genre(
+            "groom", "みためを整える系", "身だしなみと清潔感を上げるもの",
+            listOf(
+                "nails", "skin", "hair", "posture", "clothes", "brow", "shoes", "scent",
+                "teeth", "smile", "sunscreen", "lips", "mirror_check", "deodorant", "accessory", "iron",
+            ),
+        ),
+        Genre(
+            "mental", "メンタル系", "気持ちを整えるもの。「ありがとうを伝える」もここ",
+            listOf(
+                "meditation", "journal", "phone_off", "decide", "music", "breath", "sky",
+                "thanks", "reading", "tidy", "message", "laugh", "sing", "tea",
+                "self_praise", "declare", "bath", "smile",
+            ),
+        ),
+        Genre(
+            "night", "夜の仕上げ系", "寝る前のひと手間で、明日を軽くする",
+            listOf("sleep_prep", "bath", "phone_off", "clothes", "journal", "stretch", "skin", "lips", "tea"),
+        ),
+    )
+
+    fun genreById(id: String): Genre? = GENRES.firstOrNull { it.id == id }
+
     /** Points actually earned on a day: completed challenges pay their points. */
     fun dayEarned(setIds: List<String>, doneIds: Set<String>): Int =
         setIds.filter { it in doneIds }.sumOf { pointsOf(it) }
