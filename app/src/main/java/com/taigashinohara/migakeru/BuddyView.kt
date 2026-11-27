@@ -392,6 +392,12 @@ class ChallengeIconView(context: Context, private val itemId: String, rgb: Int) 
                 }
                 canvas.drawPath(base, paint)
             }
+            "chart" -> { // rising bars
+                fill()
+                canvas.drawRoundRect(oval(20f, 55f, 36f, 82f), x(3f), y(3f), paint)
+                canvas.drawRoundRect(oval(42f, 38f, 58f, 82f), x(3f), y(3f), paint)
+                canvas.drawRoundRect(oval(64f, 20f, 80f, 82f), x(3f), y(3f), paint)
+            }
             "journal" -> { // notebook
                 stroke(5f)
                 canvas.drawRoundRect(oval(30f, 13f, 72f, 87f), x(6f), y(6f), paint)
@@ -810,5 +816,87 @@ class BubbleTailView(context: Context) : View(context) {
         // Gold edges on the two slanted sides only (the base hides in the bubble).
         canvas.drawLine(0f, height * 0.18f, width.toFloat(), height * 0.5f, edgePaint)
         canvas.drawLine(width.toFloat(), height * 0.5f, 0f, height * 0.82f, edgePaint)
+    }
+}
+
+/**
+ * v0.12.0: the accumulation chart. Top: a gold mountain — cumulative
+ * completions over the last 30 days, filled so growth is visible at a
+ * glance. Bottom: daily bars for the last 14 days, today in bright gold.
+ * The normalisation keeps a plateau high (a flat spell sits proud, not
+ * dead) while any growth in the window still reads as a climb.
+ */
+class AccumulationChartView(
+    context: Context,
+    private val cumulative: List<Int>,
+    private val daily: List<Int>,
+) : View(context) {
+
+    private val density = resources.displayMetrics.density
+    private fun dpF(v: Float) = v * density
+
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x40FFC107
+        style = Paint.Style.FILL
+    }
+    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFC107.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * density
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFC107.toInt() }
+    private val barPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val basePaint = Paint().apply {
+        color = 0x33FFFFFF
+        strokeWidth = density
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val w = width.toFloat()
+        val h = height.toFloat()
+        if (w == 0f || h == 0f || cumulative.isEmpty() || daily.isEmpty()) return
+
+        // ---- the mountain (cumulative) ----
+        val topH = h * 0.58f
+        val maxC = cumulative.max()
+        val minC = cumulative.min()
+        val lo = if (maxC == 0) 0 else minOf(minC, maxC - maxOf(3, maxC / 4))
+        val span = maxOf(1, maxC - lo)
+        fun cx(i: Int) = if (cumulative.size == 1) w / 2 else w * i / (cumulative.size - 1)
+        fun cy(v: Int) = topH - ((v - lo).toFloat() / span) * (topH - dpF(10f)) - dpF(3f)
+        val area = Path()
+        val line = Path()
+        cumulative.forEachIndexed { i, v ->
+            if (i == 0) {
+                area.moveTo(cx(i), cy(v))
+                line.moveTo(cx(i), cy(v))
+            } else {
+                area.lineTo(cx(i), cy(v))
+                line.lineTo(cx(i), cy(v))
+            }
+        }
+        area.lineTo(w, topH)
+        area.lineTo(0f, topH)
+        area.close()
+        canvas.drawPath(area, fillPaint)
+        canvas.drawPath(line, linePaint)
+        canvas.drawCircle(cx(cumulative.lastIndex), cy(cumulative.last()), dpF(3.5f), dotPaint)
+
+        // ---- the bars (daily, last 14 days) ----
+        val baseY = h - dpF(2f)
+        val barTop = h * 0.68f
+        val maxBarH = baseY - barTop
+        val maxD = maxOf(1, daily.max())
+        val slot = w / daily.size
+        daily.forEachIndexed { i, v ->
+            val bh = if (v == 0) dpF(2f) else maxOf(dpF(3f), maxBarH * v / maxD)
+            val center = slot * i + slot / 2
+            val half = minOf(slot * 0.3f, dpF(7f))
+            barPaint.color = if (i == daily.lastIndex) 0xFFFFC107.toInt() else 0xFF8A6D1F.toInt()
+            canvas.drawRoundRect(center - half, baseY - bh, center + half, baseY, dpF(3f), dpF(3f), barPaint)
+        }
+        canvas.drawLine(0f, baseY, w, baseY, basePaint)
     }
 }

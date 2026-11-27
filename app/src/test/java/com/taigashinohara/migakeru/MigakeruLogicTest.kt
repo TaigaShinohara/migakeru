@@ -401,6 +401,35 @@ class MigakeruLogicTest {
 
     // ---------- v0.11.0: Health Connect auto-check ----------
 
+    /** v0.12.0: the accumulation series behind the pride graph. */
+    @Test
+    fun accumulation_seriesAndStreak() {
+        val end = LocalDate.of(2026, 11, 24)
+        val done = setOf(
+            "walk@2026-11-24", "skin@2026-11-24", "walk@2026-11-23",
+            "nails@2026-11-10", "bogus", "walk@not-a-date",
+        )
+        // 14-day window (11-11..11-24): the 11-10 entry falls outside.
+        assertEquals(
+            listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2),
+            MigakeruLogic.dailyCounts(done, end, 14),
+        )
+        // 30-day window folds everything in; the total never resets.
+        val cum = MigakeruLogic.cumulativeSeries(done, end, 30)
+        assertEquals(30, cum.size)
+        assertEquals(1, cum[15]) // 2026-11-10
+        assertEquals(4, cum.last())
+        // Streak ends today: 11-23 + 11-24 = 2 (the 11-10 day is isolated).
+        assertEquals(2, MigakeruLogic.currentStreak(done, end))
+        // A fresh morning (nothing yet today) still counts yesterday's run.
+        assertEquals(2, MigakeruLogic.currentStreak(done, end.plusDays(1)))
+        assertEquals(0, MigakeruLogic.currentStreak(done, end.plusDays(3)))
+        // Earned points come from the four parseable entries.
+        val pts = listOf("walk", "walk", "skin", "nails")
+            .sumOf { MigakeruLogic.pointsOf(it) }
+        assertEquals(pts, MigakeruLogic.earnedPoints(done))
+    }
+
     @Test
     fun autoDone_thresholds() {
         assertEquals(emptySet<String>(), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts()))

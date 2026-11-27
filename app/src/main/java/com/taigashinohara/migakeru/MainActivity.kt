@@ -1237,6 +1237,61 @@ class MainActivity : Activity() {
             scoreCard.addView(label("　今日 +$earnedToday pt", 15f, subOnGlass))
             page.addView(scoreCard, fullLp(12))
 
+            // v0.12.0: the accumulation card — open the app and see the
+            // mountain you have built. Pride first, recording second.
+            val doneAll = doneSet()
+            val accCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = card()
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+            }
+            val accHead = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            accHead.addView(
+                ChallengeIconView(this, "chart", 0xFFC107),
+                LinearLayout.LayoutParams(dp(30), dp(30)),
+            )
+            val accTitle = label("わたしの積み重ね", 16f, ink, bold = true)
+            accTitle.setPadding(dp(10), 0, 0, 0)
+            accHead.addView(accTitle)
+            accCard.addView(accHead)
+            val accTotalLp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(6) }
+            accCard.addView(
+                label("累計 ${doneAll.size} 回 ・ ${MigakeruLogic.earnedPoints(doneAll)} pt 分の「できた」", 15f, goldText, bold = true),
+                accTotalLp,
+            )
+            val accChartLp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(110),
+            ).apply { topMargin = dp(8) }
+            accCard.addView(
+                AccumulationChartView(
+                    this,
+                    MigakeruLogic.cumulativeSeries(doneAll, today, 30),
+                    MigakeruLogic.dailyCounts(doneAll, today, 14),
+                ),
+                accChartLp,
+            )
+            val accStreak = MigakeruLogic.currentStreak(doneAll, today)
+            val accCapLp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(8) }
+            accCard.addView(
+                label(
+                    when {
+                        doneAll.isEmpty() -> "まだ0回。最初の一歩が、いちばん大きい。"
+                        accStreak >= 2 -> "$accStreak 日連続で積み重ね中。それ、すごいことだよ。"
+                        else -> "グラフは、続けた分だけ伸びていく。"
+                    },
+                    13f, paleBlue,
+                ),
+                accCapLp,
+            )
+            page.addView(accCard, fullLp(12))
+
             // K4: minimal first-run intro (one card, dismissed once, no wizard).
             if (!prefs.getBoolean("intro_done", false)) {
                 val intro = LinearLayout(this).apply {

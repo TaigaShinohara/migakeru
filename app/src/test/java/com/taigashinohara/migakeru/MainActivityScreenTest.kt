@@ -144,6 +144,29 @@ class MainActivityScreenTest {
         assertNonBlank(activity, "マイチャレンジ", "からだ", "ポイント")
     }
 
+    /** v0.12.0: the accumulation card greets with the running total.
+     *  Dates are seeded relative to the real today: java.time reads the
+     *  wall clock under Robolectric, not the pinned scheduler. */
+    @Test
+    fun todayScreen_showsAccumulation() {
+        val today = java.time.LocalDate.now()
+        fun key(id: String, d: java.time.LocalDate) = "$id@$d"
+        RuntimeEnvironment.getApplication()
+            .getSharedPreferences("migakeru", Context.MODE_PRIVATE)
+            .edit()
+            .putStringSet(
+                "done",
+                setOf(
+                    key("walk", today),
+                    key("skin", today.minusDays(1)),
+                    key("nails", today.minusDays(4)),
+                ),
+            )
+            .apply()
+        val activity = launch(obDone = true)
+        assertNonBlank(activity, "わたしの積み重ね", "累計 3 回", "2 日連続で積み重ね中")
+    }
+
     @Test
     fun todayScreen_firstRun_showsIntroCard() {
         val activity = launch(obDone = true, introDone = false)

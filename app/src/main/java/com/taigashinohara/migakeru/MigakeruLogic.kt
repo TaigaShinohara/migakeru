@@ -296,6 +296,50 @@ object MigakeruLogic {
     }
 
     /** Points actually earned on a day: completed challenges pay their points. */
+    // ---- v0.12.0: accumulation series for the pride graph ----
+
+    private fun doneDate(entry: String): LocalDate? =
+        runCatching { LocalDate.parse(entry.substringAfterLast('@')) }.getOrNull()
+
+    /** Completions per day over the window ending at [end], oldest first. */
+    fun dailyCounts(done: Set<String>, end: LocalDate, days: Int): List<Int> {
+        val byDay = HashMap<LocalDate, Int>()
+        for (e in done) {
+            val d = doneDate(e) ?: continue
+            byDay[d] = (byDay[d] ?: 0) + 1
+        }
+        return (days - 1 downTo 0).map { off -> byDay[end.minusDays(off.toLong())] ?: 0 }
+    }
+
+    /** Cumulative completions up to each day of the window (all earlier
+     *  history is folded into the first day, so the mountain never resets). */
+    fun cumulativeSeries(done: Set<String>, end: LocalDate, days: Int): List<Int> {
+        val start = end.minusDays((days - 1).toLong())
+        var run = done.count { e -> doneDate(e)?.isBefore(start) == true }
+        return dailyCounts(done, end, days).map { c -> run += c; run }
+    }
+
+    /** Consecutive days with at least one completion, ending today — or
+     *  yesterday, so a fresh morning does not read as a broken streak. */
+    fun currentStreak(done: Set<String>, today: LocalDate): Int {
+        val days = done.mapNotNull { doneDate(it) }.toSet()
+        var cursor = if (today in days) today else today.minusDays(1)
+        var streak = 0
+        while (cursor in days) {
+            streak++
+            cursor = cursor.minusDays(1)
+        }
+        return streak
+    }
+
+    /** Points earned from completions alone (settlement misses are not
+     *  subtracted — this is the pride number, not the balance). */
+    fun earnedPoints(done: Set<String>): Int =
+        done.sumOf { e ->
+            val id = e.substringBeforeLast('@')
+            if (doneDate(e) != null && itemById(id) != null) pointsOf(id) else 0
+        }
+
     fun dayEarned(setIds: List<String>, doneIds: Set<String>): Int =
         setIds.filter { it in doneIds }.sumOf { pointsOf(it) }
 
