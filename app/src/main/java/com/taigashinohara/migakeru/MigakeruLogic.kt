@@ -232,7 +232,7 @@ object MigakeruLogic {
         ),
         Genre(
             "health", "ヘルスケアで自動チェックできる系",
-            "歩数・体重・睡眠など、ヘルスケアの記録で測れるもの。自動チェックは今後の連携で",
+            "歩数・体重・睡眠など、ヘルスケアの記録で測れるもの。わたし画面から連携すると自動チェック",
             listOf(
                 "walk", "stairs", "weigh", "sleep_prep", "meditation",
                 "kintore", "squat", "pushup", "plank", "radio", "abs",
