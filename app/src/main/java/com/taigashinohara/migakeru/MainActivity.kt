@@ -1761,27 +1761,61 @@ class MainActivity : Activity() {
     // ---------- 図鑑 ----------
 
     /** v0.8.0: each guide borrows the icon of its closest challenge. */
-    private data class Guide(val title: String, val body: String, val icon: String)
+    private data class Guide(val title: String, val body: String, val icon: String, val pillar: String)
 
+    /**
+     * v0.11.2: the guide shelf, enriched — one page per challenge theme,
+     * each with the point, the steps and one tip, grouped by pillar so it
+     * scans like the rest of the app. The icon doubles as the challenge id
+     * for the set-from-guide action.
+     */
     private val guides = listOf(
-        Guide("爪と手", "爪は短く清潔に。手は顔と同じくらい見られている。保湿までが1セット。", "nails"),
-        Guide("肌の保湿", "洗顔のあと1分以内に保湿。量より「毎日同じ手順」が効く。", "skin"),
-        Guide("髪の整え方", "寝ぐせは濡らして乾かし直すのが最短。整髪料は米粒ほどから。", "hair"),
-        Guide("香りは控えめに", "香水は1プッシュ、近くでだけ分かるくらいが「整っている」。", "scent"),
-        Guide("姿勢", "耳と肩が縦に並ぶ位置。壁に背中をつけて30秒で感覚を戻す。", "posture"),
-        Guide("歩き方", "視線は少し遠く、歩幅は普段より少しだけ大きく。", "walk"),
-        Guide("声と目線", "話すときは相手の目を見て、語尾まではっきり。速さはゆっくりめ。", "brow"),
-        Guide("寝る前1時間", "画面を置いて、照明を落とす。眠りの質は夜の過ごし方で決まる。", "sleep_prep"),
-        Guide("朝の光", "起きたらカーテンを開けて光を浴びる。体内時計のリセットボタン。", "sky"),
-        Guide("冷水の使い方", "シャワーの最後30秒だけ冷水に。無理のない範囲で目を覚ます。", "bath"),
-        Guide("スマホとの距離", "通知はまとめて見る。手の届かない場所に置く時間が集中を作る。", "phone_off"),
-        Guide("決めたことを守る", "小さく決めて、必ず守る。守れた回数が自信の正体。", "decide"),
+        // ---- からだ ----
+        Guide("歩き方", "視線は少し遠く、歩幅は普段より少しだけ大きく。\n・背筋を伸ばして、かかとから着地\n・腕は軽く振る（スマホはしまって）\n・1日8,000歩が目安。届かない日は「昨日より多く」でOK\nコツ：歩く速さは、隣の人と話せるくらいがちょうどいい。", "walk", Item.KARADA),
+        Guide("階段の使い方", "エレベーターより階段。日常がそのまま運動になる。\n・一段ずつ、つま先で押し上げる\n・手すりは「支え」程度に軽く\n・下りは膝を守ってゆっくり\nコツ：2階分だけでも十分。毎日続く方が勝つ。", "stairs", Item.KARADA),
+        Guide("筋トレの始め方", "週に2〜3回、大きい筋肉から。\n・脚→胸・背中→腕の順が効率的\n・「あと2回できる」重さで止める\n・筋肉痛の日は休む（休む日に育つ）\nコツ：行けた日はカレンダーに印。見える化が続く秘訣。", "kintore", Item.KARADA),
+        Guide("スクワットの形", "椅子に座るつもりで、お尻を後ろへ。\n・足は肩幅、つま先は少し外向き\n・膝はつま先と同じ向きに出す\n・10回×2セットから\nコツ：深さより形。浅くても、毎日10回が効く。", "squat", Item.KARADA),
+        Guide("腕立てとプランク", "きつい日は膝をついてOK。形が先。\n・腕立て：体は一直線、お腹に力を入れる\n・プランク：20秒から。腰を反らさない\n・できない日は回数を半分に\nコツ：「0回で終わる日」を作らないのが一番大事。", "pushup", Item.KARADA),
+        Guide("ラジオ体操のコツ", "本気でやると、立派な全身運動。\n・伸ばす所はしっかり伸ばす\n・ジャンプは小さくてOK\n・朝やると体が目覚める\nコツ：動画に合わせて3分。準備いらずが強み。", "radio", Item.KARADA),
+        Guide("ストレッチの順番", "ほぐすのは、固い所から。\n・首→肩→背中→腰→脚の順\n・1か所20秒、痛い手前で止める\n・お風呂上がりが一番伸びる\nコツ：反動はつけない。呼吸を止めない。", "stretch", Item.KARADA),
+        Guide("首・肩のほぐし方", "こりは、ためる前に流す。\n・首をゆっくり大きく回す（左右3回ずつ）\n・肩を耳に近づけて、ストンと落とす\n・1時間に1回が目安\nコツ：スマホを見たあとにやると決めると忘れない。", "neckroll", Item.KARADA),
+        Guide("湯船の入り方", "シャワーだけの日を、湯船の日に変える。\n・38〜40℃で10〜15分\n・肩までつかって深呼吸を3回\n・上がる前に足首だけ冷水も◎（無理はしない）\nコツ：スマホは持ち込まない。頭を空にする時間に。", "bath", Item.KARADA),
+        Guide("水分の取り方", "のどが渇く前に、少しずつ。\n・朝起きてコップ1杯\n・1日1.5リットルが目安\n・食事と一緒だと無理なく増える\nコツ：水筒が見える場所にあると、自然と飲める。", "water", Item.KARADA),
+        Guide("たんぱく質の目安", "筋肉の材料は、毎食少しずつ。\n・目安は体重×1.2g（70kgなら約84g）\n・卵・魚・肉・大豆をローテーション\n・朝に1品足すと届きやすい\nコツ：完璧より「毎食1品」。プロテインは補助でOK。", "protein", Item.KARADA),
+        Guide("体重の見方", "数字は、1日ではなく流れで見る。\n・毎朝、トイレのあと・同じ服で\n・増えた日は「水分かも」で流す\n・比べるのは先週の自分と\nコツ：週の平均が下がっていれば勝ち。", "weigh", Item.KARADA),
+        Guide("目の休め方", "遠くを見るだけで、目はリセットされる。\n・20分に1回、20秒遠くを見る\n・まばたきを意識して増やす\n・画面は目より少し下に\nコツ：窓の外の空が、いちばん手軽な休憩。", "eyes", Item.KARADA),
+        Guide("寝る前1時間", "眠りの質は、夜の過ごし方で決まる。\n・照明を落として、画面を置く\n・湯船→軽いストレッチ→布団の順\n・明日の服を出しておくと朝も楽\nコツ：0時前に布団に入れたら、その日は勝ち。", "sleep_prep", Item.KARADA),
+        Guide("朝の光", "起きたらカーテンを開ける。体内時計のリセットボタン。\n・曇りでも効果あり（外の光は強い）\n・ついでに深呼吸を3回\n・朝食とセットにすると続く\nコツ：目覚ましを止めたら、そのままカーテンへ。", "sky", Item.KARADA),
+        // ---- みため ----
+        Guide("爪と手", "手は顔と同じくらい見られている。\n・爪は短く、やすりで形を整える\n・洗ったあとは保湿までが1セット\n・ささくれは切らずにケア\nコツ：爪切りはお風呂上がりが割れにくい。", "nails", Item.MITAME),
+        Guide("肌の保湿", "量より「毎日同じ手順」が効く。\n・洗顔はぬるま湯、こすらない\n・洗顔のあと1分以内に保湿\n・朝は日焼け止めまでが手順\nコツ：高いものより、続くもの。手順を固定する。", "skin", Item.MITAME),
+        Guide("髪の整え方", "寝ぐせは、濡らして乾かし直すのが最短。\n・根元を濡らしてドライヤーで形を作る\n・整髪料は米粒ほどから、足りなければ足す\n・最後に冷風で固定\nコツ：つけすぎが一番の失敗。少なめから。", "hair", Item.MITAME),
+        Guide("眉の整え方", "眉で顔の印象は大きく変わる。整えるのは「余分」だけ。\n・眉間の産毛を取る\n・下側のはみ出しを整える\n・長すぎる毛だけカット\nコツ：抜きすぎ注意。1週間に1回、明るい場所で。", "brow", Item.MITAME),
+        Guide("姿勢", "耳と肩が縦に並ぶ位置が、正解。\n・壁に背中をつけて30秒、感覚を覚える\n・座るときは骨盤を立てる\n・目線は少し遠くに\nコツ：気づいたときに直す。その回数が姿勢を作る。", "posture", Item.MITAME),
+        Guide("香りは控えめに", "近くでだけ分かるくらいが「整っている」。\n・香水は1プッシュ（手首か首筋）\n・つけるのは出かける30分前\n・汗のケアが先、香りは後\nコツ：自分で匂わないくらいが、他人にはちょうどいい。", "scent", Item.MITAME),
+        Guide("歯と口元", "口元が清潔だと、笑顔に自信が出る。\n・夜はフロス→歯磨きの順\n・舌も軽くケア\n・磨く時間は2分が目安\nコツ：フロスは「1本だけ」でも始める価値あり。", "teeth", Item.MITAME),
+        Guide("唇のケア", "唇は、乾燥する前に守る。\n・リップは朝と寝る前に\n・なめるのは逆効果（乾く）\n・水を飲むのもケアのうち\nコツ：枕元にリップを置くと忘れない。", "lips", Item.MITAME),
+        Guide("靴の手入れ", "足元が綺麗な人は、信頼される。\n・帰ったらブラシでほこりを落とす\n・週1で汚れを拭く\n・同じ靴を連日履かない\nコツ：玄関にブラシがあると、習慣になる。", "shoes", Item.MITAME),
+        Guide("服は前日に決める", "朝の迷いをゼロにする仕掛け。\n・寝る前に明日1式を出しておく\n・迷ったら「よく着る組み合わせ」で固定\n・靴と時計まで決めると完璧\nコツ：決断は夜の自分に任せて、朝は着るだけ。", "clothes", Item.MITAME),
+        // ---- こころ ----
+        Guide("瞑想の入り方", "静かにするコツは「呼吸を数える」だけ。\n・座って目を閉じる\n・吐く息を数える（1〜10を繰り返す）\n・雑念が来たら「戻る」が練習そのもの\nコツ：3分で十分。タイマーを使うと楽。", "meditation", Item.KOKORO),
+        Guide("深呼吸のやり方", "3回で、心は落ち着く。\n・鼻から4秒吸う\n・口から8秒かけて吐く\n・これを3セット\nコツ：吐く方を長くするのがコツ。ソワソワしたらまずこれ。", "breath", Item.KOKORO),
+        Guide("ありがとうの伝え方", "伝えた分だけ、関係が温まる。\n・「ありがとう＋何が嬉しかったか」をセットで\n・その日のうちに伝える\n・短くていい、LINEでもいい\nコツ：照れくさいときほど、短くサッと。", "thanks", Item.KOKORO),
+        Guide("1行日記の書き方", "書くと、気持ちが整う。長さは1行でいい。\n・「今日よかったこと」を1つ\n・事実だけ書く（評価はいらない）\n・寝る前の2分で\nコツ：書けない日は「なし」と書いて完了にする。", "journal", Item.KOKORO),
+        Guide("スマホとの距離", "通知はまとめて見る。集中は自分で守る。\n・通知は必要なものだけ残す\n・食事中は手の届かない場所へ\n・寝る1時間前は別室に\nコツ：「置く場所」を決めるのが一番効く。", "phone_off", Item.KOKORO),
+        Guide("決めたことを守る", "小さく決めて、必ず守る。\n・約束は「できる大きさ」で決める\n・守れたら自分で認める\n・破れたら、次はもっと小さく\nコツ：守れた回数が、自信の正体。", "decide", Item.KOKORO),
+        Guide("音楽で切り替える", "1曲で、気分は切り替わる。\n・「切り替え用」の1曲を決めておく\n・朝用／集中用／休息用に分ける\n・聴くタイミングを固定する\nコツ：曲を合図にすると、体が勝手に切り替わる。", "music", Item.KOKORO),
+        Guide("お茶の時間", "温かい飲み物は、手軽な休息。\n・淹れる所作そのものが休憩\n・夕方以降はカフェイン控えめに\n・湯気で3回深呼吸\nコツ：マグカップをお気に入りにすると、時間が特別になる。", "tea", Item.KOKORO),
     )
 
     private fun guideScreen(): ScrollView = scrollPage { page ->
         page.addView(headingWithIcon("整え図鑑", "journal", 0x66BB6A))
-        page.addView(label("題名をタップすると、その1枚だけ開く。", 13f, paleBlue))
-        guides.forEachIndexed { i, g ->
+        page.addView(label("チャレンジの「やり方」を書いた辞書。やり方に迷ったときに開く場所。気になったら、その場でチャレンジにセットできる。", 13f, paleBlue))
+        // v0.11.2: grouped by pillar (からだ／みため／こころ) — the same
+        // order as everywhere else, so a page is findable at a glance.
+        for (pillar in listOf(Item.KARADA, Item.MITAME, Item.KOKORO)) {
+            page.addView(label(pillar, 17f, white, bold = true), fullLp(20))
+            guides.withIndex().filter { it.value.pillar == pillar }.forEach { (i, g) ->
             val open = openGuide == i
             val box = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -1803,13 +1837,38 @@ class MainActivity : Activity() {
             head.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             head.addView(label(if (open) "−" else "＋", 17f, subOnGlass, bold = true))
             box.addView(head)
-            if (open) box.addView(label(g.body, 15f, subOnGlass))
+            if (open) {
+                box.addView(label(g.body, 15f, subOnGlass))
+                // v0.11.2: reading turns into doing — the guide's challenge
+                // can be set right here, so the page has a use, not just text.
+                val item = MigakeruLogic.itemById(g.icon)
+                if (item != null) {
+                    val set = challengeSet()
+                    val actionLp = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ).apply { topMargin = dp(10) }
+                    when {
+                        item.id in set -> box.addView(
+                            label("今日のチャレンジにセット中", 13f, goldText, bold = true), actionLp,
+                        )
+                        set.size >= slotCount() -> box.addView(
+                            label("枠がいっぱい。入れ替えは今日の画面から。", 13f, paleBlue), actionLp,
+                        )
+                        else -> box.addView(lightButton("このチャレンジをセットする") {
+                            saveChallengeSet(set + item.id)
+                            Toast.makeText(this, "「${item.label}」をセットしたよ", Toast.LENGTH_SHORT).show()
+                            showScreen(2)
+                        }, actionLp)
+                    }
+                }
+            }
             pressable(box)
             box.setOnClickListener {
                 openGuide = if (open) -1 else i
                 showScreen(2)
             }
             page.addView(box, fullLp(12))
+            }
         }
     }
 

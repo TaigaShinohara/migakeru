@@ -194,8 +194,33 @@ class MainActivityScreenTest {
     fun guideScreen_rendersNonBlank() {
         val activity = launch(obDone = true)
         clickTab(activity, "図鑑")
-        assertNonBlank(activity, "整え図鑑", "爪と手")
+        // v0.11.2: pillar sections organise the shelf.
+        assertNonBlank(activity, "整え図鑑", "からだ", "みため", "こころ", "爪と手")
         shot(activity, "guide")
+    }
+
+    /** v0.11.2: a guide page can set its challenge on the spot. */
+    @Test
+    fun guideScreen_canSetChallengeFromGuide() {
+        val activity = launch(obDone = true)
+        val prefs = RuntimeEnvironment.getApplication()
+            .getSharedPreferences("migakeru", Context.MODE_PRIVATE)
+        // One set challenge in three slots: room to add from the guide.
+        prefs.edit().putStringSet("ch_set", setOf("walk")).apply()
+        clickTab(activity, "図鑑")
+        val root = activity.window.decorView
+        val box = allViews(root).firstOrNull { it.contentDescription?.toString() == "爪と手" }
+        assertTrue("guide box not found", box != null)
+        box!!.performClick()
+        settle(root)
+        val setBtn = allViews(root).filterIsInstance<Button>()
+            .firstOrNull { it.text.toString() == "このチャレンジをセットする" }
+        assertTrue("set button not found", setBtn != null)
+        setBtn!!.performClick()
+        settle(root)
+        val set = prefs.getStringSet("ch_set", emptySet()) ?: emptySet()
+        assertTrue("nails not added to set: $set", "nails" in set)
+        assertNonBlank(activity, "セット中")
     }
 
     @Test
