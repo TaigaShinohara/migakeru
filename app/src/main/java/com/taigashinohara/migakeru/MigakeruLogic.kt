@@ -261,6 +261,40 @@ object MigakeruLogic {
 
     fun genreById(id: String): Genre? = GENRES.firstOrNull { it.id == id }
 
+    // ---------- v0.11.0: Health Connect auto-check ----------
+
+    /** One day of health data, as read from Health Connect. */
+    data class HealthFacts(
+        val steps: Int = 0,
+        val floors: Double = 0.0,
+        val hasWeight: Boolean = false,
+        val hasExercise: Boolean = false,
+        val hasMindfulness: Boolean = false,
+        /** Fell asleep on that date (before midnight), per the sleep record. */
+        val sleptBeforeMidnight: Boolean = false,
+    )
+
+    /** The walk challenge's own yardstick (its label says 目安 8,000歩）. */
+    const val AUTO_STEP_GOAL = 8000
+
+    /**
+     * Which challenges the day's health data proves done. Deliberately
+     * conservative: Health Connect cannot tell a squat from a plank, so
+     * the bodyweight set stays manual — an exercise session only proves
+     * 筋トレに行く. Sleep uses the near approximation from the design:
+     * a sleep session that started on the date (before midnight).
+     */
+    fun autoDoneIds(facts: HealthFacts): Set<String> {
+        val out = mutableSetOf<String>()
+        if (facts.steps >= AUTO_STEP_GOAL) out += "walk"
+        if (facts.floors >= 1.0) out += "stairs"
+        if (facts.hasWeight) out += "weigh"
+        if (facts.hasExercise) out += "kintore"
+        if (facts.hasMindfulness) out += "meditation"
+        if (facts.sleptBeforeMidnight) out += "sleep_prep"
+        return out
+    }
+
     /** Points actually earned on a day: completed challenges pay their points. */
     fun dayEarned(setIds: List<String>, doneIds: Set<String>): Int =
         setIds.filter { it in doneIds }.sumOf { pointsOf(it) }

@@ -398,6 +398,30 @@ class MigakeruLogicTest {
         assertEquals("夜だな。無理せずいこう。おつかれさま！", MigakeruLogic.greetingForHour(0))
         assertEquals("夜だな。無理せずいこう。おつかれさま！", MigakeruLogic.greetingForHour(4))
     }
+
+    // ---------- v0.11.0: Health Connect auto-check ----------
+
+    @Test
+    fun autoDone_thresholds() {
+        assertEquals(emptySet<String>(), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts()))
+        assertEquals(setOf("walk"), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(steps = 8000)))
+        assertEquals(emptySet<String>(), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(steps = 7999)))
+        assertEquals(setOf("stairs"), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(floors = 1.0)))
+        assertEquals(emptySet<String>(), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(floors = 0.5)))
+        assertEquals(setOf("weigh"), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(hasWeight = true)))
+        assertEquals(setOf("kintore"), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(hasExercise = true)))
+        assertEquals(setOf("meditation"), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(hasMindfulness = true)))
+        assertEquals(setOf("sleep_prep"), MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(sleptBeforeMidnight = true)))
+        // An exercise session must NOT prove the bodyweight set (HC cannot
+        // tell a squat from a plank) — those stay manual on purpose.
+        val exerciseOnly = MigakeruLogic.autoDoneIds(MigakeruLogic.HealthFacts(hasExercise = true))
+        assertTrue(exerciseOnly.none { it in setOf("squat", "pushup", "plank", "abs", "radio") })
+        // Everything at once proves exactly the six auto-checkable ids.
+        val all = MigakeruLogic.autoDoneIds(
+            MigakeruLogic.HealthFacts(9000, 3.0, true, true, true, true),
+        )
+        assertEquals(setOf("walk", "stairs", "weigh", "kintore", "meditation", "sleep_prep"), all)
+    }
 }
 
 // v0.1.1: design v0.2 §5.3 pool completeness (mitame must have all 5 items).

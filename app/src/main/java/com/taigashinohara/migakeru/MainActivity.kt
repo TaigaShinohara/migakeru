@@ -2,6 +2,7 @@ package com.taigashinohara.migakeru
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -25,6 +26,11 @@ import android.widget.TextView
 import android.widget.Toast
 import java.time.DayOfWeek
 import java.time.LocalDate
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
@@ -92,6 +98,11 @@ class MainActivity : Activity() {
     private var openGuide = -1
     private var pendingCatalog = false
 
+    // v0.11.0: Health Connect auto-check plumbing.
+    private val hcScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val hcSource by lazy { HealthConnectSource(this) }
+    private var mainShown = false
+
     // Onboarding state (mobile_onboarding skill; design v0.5 §5.5).
     private var obPage = 0
     private var obFocus: String? = null
@@ -130,6 +141,16 @@ class MainActivity : Activity() {
         } catch (t: Throwable) {
             showError(t)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshTodayAuto()
+    }
+
+    override fun onDestroy() {
+        hcScope.cancel()
+        super.onDestroy()
     }
 
     /**
@@ -203,8 +224,13 @@ class MainActivity : Activity() {
     private fun showMain() {
         // v0.7.0: first run of the challenge system, then settle past days
         // before anything renders, so score/slots are already current.
+        // v0.11.0: when Health Connect is linked, settlement waits until
+        // the unsettled days' health data is merged in (async, below), so
+        // a day the app was never opened still gets its auto-checks.
         initChallengeSystem()
-        settlePastDays()
+        val deferSettle = hcLinked()
+        if (!deferSettle) settlePastDays()
+        mainShown = true
         val root = FrameLayout(this)
         root.addView(backgroundLayer(), FrameLayout.LayoutParams(-1, -1))
 
@@ -255,6 +281,7 @@ class MainActivity : Activity() {
             showScreen(4)
         }
         selfCheck(root, "main")
+        if (deferSettle) syncHealthThenSettle()
     }
 
     /** Standard base: navy gradient + blurred brand lights (approximation). */
@@ -310,6 +337,117 @@ class MainActivity : Activity() {
 
     /** Ever-graduated item ids — the permanent badge record （わたし画面）. */
     private fun badges(): Set<String> = prefs.getStringSet("graduated", emptySet()) ?: emptySet()
+
+    // ---------- v0.11.0: Health Connect auto-check ----------
+
+    private fun hcLinked(): Boolean = prefs.getBoolean("hc_linked", false)
+
+    /** "id@date" entries the health data checked off (same shape as done). */
+    private fun hcAutoSet(): MutableSet<String> =
+        prefs.getStringSet("hc_auto", emptySet())?.toMutableSet() ?: mutableSetOf()
+
+    private fun isAutoDone(itemId: String, date: LocalDate) =
+        hcAutoSet().contains("$itemId@${date.format(dateFmt)}")
+
+    /** Auto-checks the user manually undid — never re-added that day. */
+    private fun hcOffSet(): MutableSet<String> =
+        prefs.getStringSet("hc_off", emptySet())?.toMutableSet() ?: mutableSetOf()
+
+    /**
+     * Merge one day's health facts into the done record. Only adds, only
+     * for challenges in that day's set, and never overrides a manual undo.
+     * Returns true when anything changed.
+     */
+    private fun mergeAutoDone(date: LocalDate, facts: MigakeruLogic.HealthFacts): Boolean {
+        val candidates = MigakeruLogic.autoDoneIds(facts) intersect setForDate(date).toSet()
+        if (candidates.isEmpty()) return false
+        val off = hcOffSet()
+        val auto = hcAutoSet()
+        var changed = false
+        for (id in candidates) {
+            val key = "$id@${date.format(dateFmt)}"
+            if (key in off) continue
+            if (!isDone(id, date)) {
+                setDone(id, date, true)
+                changed = true
+            }
+            if (auto.add(key)) changed = true
+        }
+        if (changed) prefs.edit().putStringSet("hc_auto", auto).apply()
+        return changed
+    }
+
+    /** Startup (linked only): merge every unsettled day + today, then settle. */
+    private fun syncHealthThenSettle() {
+        hcScope.launch {
+            runCatching {
+                val client = hcSource.clientOrNull() ?: return@runCatching
+                if (hcSource.grantedPermissions(client).isEmpty()) {
+                    // Permissions were revoked in the Health Connect app.
+                    prefs.edit().putBoolean("hc_linked", false).apply()
+                    return@runCatching
+                }
+                val yesterday = LocalDate.now().minusDays(1)
+                var day = runCatching {
+                    LocalDate.parse(prefs.getString("score_settled_until", "") ?: "", dateFmt)
+                }.getOrNull()?.plusDays(1)
+                var guard = 0
+                while (day != null && !day.isAfter(yesterday) && guard < 400) {
+                    mergeAutoDone(day, hcSource.factsFor(client, day))
+                    day = day.plusDays(1)
+                    guard++
+                }
+                mergeAutoDone(LocalDate.now(), hcSource.factsFor(client, LocalDate.now()))
+            }
+            settlePastDays()
+            if (mainShown) showScreen(currentTab)
+        }
+    }
+
+    /** onResume refresh: today's numbers may have moved since this morning. */
+    private fun refreshTodayAuto() {
+        if (!hcLinked() || !mainShown) return
+        hcScope.launch {
+            val changed = runCatching {
+                val client = hcSource.clientOrNull() ?: return@runCatching false
+                mergeAutoDone(LocalDate.now(), hcSource.factsFor(client, LocalDate.now()))
+            }.getOrDefault(false)
+            if (changed && mainShown) showScreen(currentTab)
+        }
+    }
+
+    private fun requestHealthPermissions() {
+        if (hcSource.clientOrNull() == null) {
+            Toast.makeText(this, "Health Connect が見つからなかった", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = hcSource.permissionContract().createIntent(this, HealthConnectSource.PERMISSIONS)
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, REQ_HC_PERMISSIONS)
+    }
+
+    @Deprecated("The HC permission contract is launched manually (plain Activity).")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_HC_PERMISSIONS) return
+        val granted = runCatching {
+            hcSource.permissionContract().parseResult(resultCode, data)
+        }.getOrDefault(emptySet())
+        if (granted.isNotEmpty()) {
+            prefs.edit().putBoolean("hc_linked", true).apply()
+            Toast.makeText(this, "連携したよ。今日の分から自動チェックする", Toast.LENGTH_SHORT).show()
+            hcScope.launch {
+                runCatching {
+                    val client = hcSource.clientOrNull() ?: return@runCatching
+                    mergeAutoDone(LocalDate.now(), hcSource.factsFor(client, LocalDate.now()))
+                }
+                if (mainShown) showScreen(currentTab)
+            }
+        } else {
+            Toast.makeText(this, "許可されなかったから、連携はお休み", Toast.LENGTH_SHORT).show()
+            if (mainShown) showScreen(currentTab)
+        }
+    }
 
     /** Most recent completion day before [today]; null if none yet. */
     private fun lastActiveBefore(today: LocalDate): LocalDate? =
@@ -599,6 +737,7 @@ class MainActivity : Activity() {
 
     private companion object {
         const val OB_TOTAL = 11
+        const val REQ_HC_PERMISSIONS = 4110
     }
 
     private fun showOnboarding() {
@@ -1167,6 +1306,9 @@ class MainActivity : Activity() {
                 val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 chipRow.addView(pillarChip(item.pillar))
                 chipRow.addView(label("　${MigakeruLogic.pointsOf(item.id)} pt", 13f, goldText, bold = true))
+                if (done && isAutoDone(item.id, today)) {
+                    chipRow.addView(label("　⌚ 自動チェック", 12f, subOnGlass))
+                }
                 texts.addView(chipRow)
                 texts.addView(label(item.label, 17f, if (done) subOnGlass else ink, bold = true))
                 row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -1174,6 +1316,17 @@ class MainActivity : Activity() {
                 row.setOnClickListener {
                     val wasDone = isDone(item.id, today)
                     setDone(item.id, today, !wasDone)
+                    // v0.11.0: undoing an auto-check sticks for the day —
+                    // the health merge must not silently re-add it.
+                    val dayKey = "${item.id}@${today.format(dateFmt)}"
+                    if (wasDone && isAutoDone(item.id, today)) {
+                        val off = hcOffSet(); off.add(dayKey)
+                        val auto = hcAutoSet(); auto.remove(dayKey)
+                        prefs.edit().putStringSet("hc_off", off).putStringSet("hc_auto", auto).apply()
+                    } else if (!wasDone) {
+                        val off = hcOffSet()
+                        if (off.remove(dayKey)) prefs.edit().putStringSet("hc_off", off).apply()
+                    }
                     if (wasDone) {
                         Toast.makeText(this, "「${item.label}」の完了を取り消したよ", Toast.LENGTH_SHORT).show()
                     } else {
@@ -1717,10 +1870,32 @@ class MainActivity : Activity() {
             )
         }
 
-        page.addView(
-            label("Health Connect は任意・読み取りだけ（歩数／運動／睡眠／体重）。この版では未接続で、タップ記録だけで動く。", 13f, paleBlue),
-            fullLp(24),
-        )
+        // v0.11.0: Health Connect linkage (read-only auto-check).
+        page.addView(label("ヘルスケア連携", 17f, white, bold = true), fullLp(24))
+        val hcCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = card()
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+        }
+        when {
+            !hcSource.isAvailable() -> {
+                hcCard.addView(label("この端末では Health Connect が使えないみたい。タップ記録だけで大丈夫。", 15f, ink))
+            }
+            hcLinked() -> {
+                hcCard.addView(label("連携中。歩数・階段・体重・運動・瞑想・睡眠を読んで、できたものは自動でチェックする。読み取りだけ、書き込みはしない。", 15f, ink))
+                hcCard.addView(ghostButton("許可を見直す") { requestHealthPermissions() }, fullLp(12))
+                hcCard.addView(ghostButton("連携をやめる") {
+                    prefs.edit().putBoolean("hc_linked", false).apply()
+                    Toast.makeText(this, "連携をやめたよ", Toast.LENGTH_SHORT).show()
+                    showScreen(3)
+                }, fullLp(12))
+            }
+            else -> {
+                hcCard.addView(label("歩数や運動のデータとつなぐと、できたチャレンジが自動でチェックされる。読み取りだけ、任意。", 15f, ink))
+                hcCard.addView(primaryButton("ヘルスケアと連携する") { requestHealthPermissions() }, fullLp(12))
+            }
+        }
+        page.addView(hcCard, fullLp(12))
 
         page.addView(ghostButton("記録をすべて消す") {
             AlertDialog.Builder(this)

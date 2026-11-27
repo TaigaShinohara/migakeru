@@ -23,8 +23,8 @@ android {
         applicationId = "com.taigashinohara.migakeru"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.10.0"
+        versionCode = 19
+        versionName = "0.11.0"
     }
 
     signingConfigs {
@@ -66,6 +66,11 @@ android {
 }
 
 dependencies {
+    // v0.11.0: Health Connect (read-only) for the auto-check shelf.
+    // beta01 is the newest release whose AAR metadata still accepts this
+    // project's AGP 8.7.3 / compileSdk 35 (1.1.0 stable demands AGP 8.9.1).
+    implementation("androidx.health.connect:connect-client:1.1.0-beta01")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     testImplementation("junit:junit:4.13.2")
     // Pre-delivery UI verification on the JVM (no emulator in the build VM):
     // Robolectric launches the real activity; Roborazzi screenshots it.
