@@ -2,6 +2,7 @@ package com.taigashinohara.migakeru
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -450,6 +451,49 @@ class MigakeruLogicTest {
             MigakeruLogic.HealthFacts(9000, 3.0, true, true, true, true),
         )
         assertEquals(setOf("walk", "stairs", "weigh", "kintore", "meditation", "sleep_prep"), all)
+    }
+
+    // ---------- v0.13.0: 今日の空 (weather-fed recommendation) ----------
+
+    private fun sky(
+        code: Int = 0, tMax: Double = 22.0, tMin: Double = 12.0,
+        uv: Double = 3.0, precip: Int = 0, wind: Double = 10.0,
+    ) = MigakeruLogic.DaySky(code, tMax, tMin, uv, precip, wind)
+
+    @Test
+    fun skyKind_classifiesByFact() {
+        // Rain wins by code, and by probability alone.
+        assertEquals(MigakeruLogic.SkyKind.RAIN, MigakeruLogic.skyKind(sky(code = 61)))
+        assertEquals(MigakeruLogic.SkyKind.RAIN, MigakeruLogic.skyKind(sky(code = 3, precip = 60)))
+        // Snow is an indoor day too.
+        assertEquals(MigakeruLogic.SkyKind.RAIN, MigakeruLogic.skyKind(sky(code = 73)))
+        // Heat and cold outrank the plain labels.
+        assertEquals(MigakeruLogic.SkyKind.HOT, MigakeruLogic.skyKind(sky(tMax = 31.0)))
+        assertEquals(MigakeruLogic.SkyKind.COLD, MigakeruLogic.skyKind(sky(tMin = 4.0)))
+        assertEquals(MigakeruLogic.SkyKind.UV, MigakeruLogic.skyKind(sky(uv = 7.0)))
+        assertEquals(MigakeruLogic.SkyKind.WINDY, MigakeruLogic.skyKind(sky(code = 2, wind = 40.0)))
+        assertEquals(MigakeruLogic.SkyKind.CLEAR, MigakeruLogic.skyKind(sky(code = 0)))
+        assertEquals(MigakeruLogic.SkyKind.MILD, MigakeruLogic.skyKind(sky(code = 3)))
+        // Fact line: label + rounded high, nothing more.
+        assertEquals("雨・18℃", MigakeruLogic.skyFactLine(sky(code = 61, tMax = 18.4)))
+        assertTrue(MigakeruLogic.skyMessage(MigakeruLogic.SkyKind.RAIN, true).startsWith("おかえり。"))
+    }
+
+    @Test
+    fun skyPick_skipsSetMembersAndRotates() {
+        val date = LocalDate.of(2026, 11, 24)
+        val kind = MigakeruLogic.SkyKind.RAIN
+        val pick = MigakeruLogic.skyPick(kind, date, emptySet())
+        assertNotNull(pick)
+        // A pick already in the user's set is never offered.
+        val without = MigakeruLogic.skyPick(kind, date, setOf(pick!!))
+        assertNotNull(without)
+        assertTrue(without != pick)
+        // The whole pool in the set -> no pick at all (quiet, no force).
+        val wholePool = setOf("plank", "stretch", "squat", "tidy", "reading", "pushup")
+        assertEquals(null, MigakeruLogic.skyPick(kind, date, wholePool))
+        // Same inputs, same pick (the day does not change its mind).
+        assertEquals(pick, MigakeruLogic.skyPick(kind, date, emptySet()))
     }
 }
 

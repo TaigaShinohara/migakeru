@@ -343,6 +343,95 @@ object MigakeruLogic {
     fun dayEarned(setIds: List<String>, doneIds: Set<String>): Int =
         setIds.filter { it in doneIds }.sumOf { pointsOf(it) }
 
+    // ---- v0.13.0: 今日の空 — the day's reason comes from outside ----
+    //
+    // Shared design premise (user, 2026-11-27): the app does not invent
+    // reasons; it rides on reasons already turning in the world (here:
+    // the weather). Facts are delivered quietly, never hyped. A missed
+    // bonus is never punished — the sky pick lives outside the settled
+    // set, so settlement can only ever add its points, never subtract.
+
+    enum class SkyKind { RAIN, HOT, COLD, UV, WINDY, CLEAR, MILD }
+
+    /** One day's forecast facts (Open-Meteo daily values). */
+    data class DaySky(
+        val code: Int,
+        val tempMax: Double,
+        val tempMin: Double,
+        val uvMax: Double,
+        val precipProb: Int,
+        val windMaxKmh: Double,
+    )
+
+    /** WMO codes that keep the day indoors (drizzle/rain/snow/storm). */
+    private val INDOOR_CODES = setOf(
+        51, 53, 55, 56, 57, 61, 63, 65, 66, 67,
+        71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99,
+    )
+
+    fun skyKind(sky: DaySky): SkyKind = when {
+        sky.code in INDOOR_CODES || sky.precipProb >= 50 -> SkyKind.RAIN
+        sky.tempMax >= 30.0 -> SkyKind.HOT
+        sky.tempMin <= 5.0 -> SkyKind.COLD
+        sky.uvMax >= 6.0 -> SkyKind.UV
+        sky.windMaxKmh >= 36.0 -> SkyKind.WINDY
+        sky.code == 0 || sky.code == 1 -> SkyKind.CLEAR
+        else -> SkyKind.MILD
+    }
+
+    /** Short weather label for the card's fact line. */
+    fun skyCodeLabel(code: Int): String = when (code) {
+        0 -> "晴れ"
+        1, 2 -> "晴れ時々くもり"
+        3 -> "くもり"
+        45, 48 -> "霧"
+        51, 53, 55, 56, 57 -> "霧雨"
+        61, 63, 65, 66, 67, 80, 81, 82 -> "雨"
+        71, 73, 75, 77, 85, 86 -> "雪"
+        95, 96, 99 -> "雷雨"
+        else -> "くもり"
+    }
+
+    /** The fact line: label + the day's high, nothing dressed up. */
+    fun skyFactLine(sky: DaySky): String =
+        "${skyCodeLabel(sky.code)}・${Math.round(sky.tempMax)}℃"
+
+    /** The buddy's quiet word for the day. [welcomeBack] is for a return
+     *  after a gap — coming back is the event worth naming. */
+    fun skyMessage(kind: SkyKind, welcomeBack: Boolean): String {
+        val base = when (kind) {
+            SkyKind.RAIN -> "室内でできるやつを置いといたよ。"
+            SkyKind.HOT -> "暑くなりそう。軽めのやつを置いといたよ。"
+            SkyKind.COLD -> "冷えそうな日。温まるやつを置いといたよ。"
+            SkyKind.UV -> "日差しが強そう。ケアのやつを置いといたよ。"
+            SkyKind.WINDY -> "風の強い日。室内のやつを置いといたよ。"
+            SkyKind.CLEAR -> "外のやつが合う日。1つ置いといたよ。"
+            SkyKind.MILD -> "穏やかな日。今日の分に1つ置いといたよ。"
+        }
+        return if (welcomeBack) "おかえり。$base" else base
+    }
+
+    private val SKY_POOLS: Map<SkyKind, List<String>> = mapOf(
+        SkyKind.RAIN to listOf("plank", "stretch", "squat", "tidy", "reading", "pushup"),
+        SkyKind.HOT to listOf("water", "skin", "breath", "eyes", "sunscreen"),
+        SkyKind.COLD to listOf("bath", "stretch", "radio", "tea", "neckroll"),
+        SkyKind.UV to listOf("sunscreen", "skin", "lips", "deodorant"),
+        SkyKind.WINDY to listOf("meditation", "journal", "tidy", "breath"),
+        SkyKind.CLEAR to listOf("walk", "stairs", "posture", "sky"),
+        SkyKind.MILD to listOf("walk", "stretch", "music", "smile", "weigh"),
+    )
+
+    /**
+     * The day's sky pick: a pool entry not already in the user's set,
+     * rotated by day-of-year so consecutive days do not repeat the same
+     * pick. Null when the whole pool is already in the set.
+     */
+    fun skyPick(kind: SkyKind, date: LocalDate, exclude: Set<String>): String? {
+        val pool = SKY_POOLS[kind].orEmpty().filter { it !in exclude && itemById(it) != null }
+        if (pool.isEmpty()) return null
+        return pool[date.dayOfYear % pool.size]
+    }
+
     /**
      * The day's settlement delta: done = +points, missed = a flat −1 each,
      * whatever the challenge (user's rule).
