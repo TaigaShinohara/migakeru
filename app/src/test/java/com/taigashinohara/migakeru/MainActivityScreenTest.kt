@@ -253,4 +253,57 @@ class MainActivityScreenTest {
         assertNonBlank(activity, "卒業した習慣", "ポイント")
         shot(activity, "me")
     }
+
+    /** v0.13.0: with the permission granted and a rainy cache seeded,
+     *  the sky card offers one indoor pick; tapping adds it as a bonus
+     *  row outside the user's set. */
+    @Test
+    fun skyCard_offersPickAndAddsBonus() {
+        val app = RuntimeEnvironment.getApplication()
+        shadowOf(app).grantPermissions(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        val prefs = app.getSharedPreferences("migakeru", Context.MODE_PRIVATE)
+        val today = java.time.LocalDate.now()
+        SkyWeather.writeCache(
+            prefs, today,
+            MigakeruLogic.DaySky(61, 18.0, 10.0, 2.0, 80, 12.0),
+        )
+        val activity = launch(obDone = true)
+        assertNonBlank(activity, "今日の空", "雨・18℃", "室内でできるやつを置いといたよ。")
+        val root = activity.window.decorView
+        val addBtn = allViews(root).filterIsInstance<Button>()
+            .firstOrNull { it.text.toString().startsWith("＋ ") }
+        assertTrue("sky add button not found (texts: ${texts(root)})", addBtn != null)
+        addBtn!!.performClick()
+        settle(root)
+        assertNonBlank(activity, "空のおすすめ", "おすすめは、今日の分に入ってるよ。")
+        val bonus = prefs.getStringSet("sky_bonus", emptySet()) ?: emptySet()
+        assertTrue("bonus not stored: $bonus", bonus.any { it.endsWith("@$today") })
+    }
+
+    /** v0.13.0: settlement folds a done sky bonus in as pure gain and a
+     *  missed one as exactly zero — the bonus can never cost points. */
+    @Test
+    fun skyBonus_settlesAsPureGain() {
+        val app = RuntimeEnvironment.getApplication()
+        val prefs = app.getSharedPreferences("migakeru", Context.MODE_PRIVATE)
+        val today = java.time.LocalDate.now()
+        val fmt = java.time.format.DateTimeFormatter.ISO_LOCAL_DATE
+        fun key(id: String, d: java.time.LocalDate) = "$id@${d.format(fmt)}"
+        prefs.edit()
+            .putString("score_settled_until", today.minusDays(3).format(fmt))
+            .putStringSet(
+                "sky_bonus",
+                setOf(key("plank", today.minusDays(2)), key("plank", today.minusDays(1))),
+            )
+            .putStringSet("done", setOf(key("plank", today.minusDays(1))))
+            .apply()
+        launch(obDone = true)
+        // Only yesterday's bonus was done; the missed one adds nothing
+        // and subtracts nothing. No set history exists, so the set side
+        // contributes zero too.
+        assertTrue(
+            "score_total should be exactly the done bonus's points",
+            prefs.getInt("score_total", -1) == MigakeruLogic.pointsOf("plank"),
+        )
+    }
 }

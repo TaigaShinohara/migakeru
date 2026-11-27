@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 
@@ -231,6 +232,9 @@ class MainActivity : Activity() {
         val deferSettle = hcLinked()
         if (!deferSettle) settlePastDays()
         mainShown = true
+        // v0.13.0: refresh the sky in the background (no-op without the
+        // location permission or with a fresh cache).
+        maybeFetchSky()
         val root = FrameLayout(this)
         root.addView(backgroundLayer(), FrameLayout.LayoutParams(-1, -1))
 
@@ -543,6 +547,12 @@ class MainActivity : Activity() {
                 score += MigakeruLogic.dayDelta(set, doneIds)
                 state = MigakeruLogic.applySettledDay(state, doneIds.size == set.size)
             }
+            // v0.13.0: a sky bonus can only ever add — done pays its
+            // points, a miss costs nothing (it was never the user's set).
+            val bonus = skyBonusFor(day)
+            if (bonus != null && isDone(bonus, day)) {
+                score += MigakeruLogic.pointsOf(bonus)
+            }
             cursor = day
             day = day.plusDays(1)
             guard++
@@ -554,6 +564,70 @@ class MainActivity : Activity() {
             .putBoolean("ch_unlock_pending", state.pendingUnlock)
             .putString("score_settled_until", cursor.format(dateFmt))
             .apply()
+    }
+
+    // ---------- v0.13.0: 今日の空 ----------
+
+    private fun skyPermissionGranted(): Boolean =
+        checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    /** Sky bonuses ever added, as "id@yyyy-MM-dd" entries. */
+    private fun skyBonusSet(): MutableSet<String> =
+        prefs.getStringSet("sky_bonus", emptySet())?.toMutableSet() ?: mutableSetOf()
+
+    private fun skyBonusFor(date: LocalDate): String? =
+        skyBonusSet().firstOrNull { it.endsWith("@${date.format(dateFmt)}") }
+            ?.substringBeforeLast('@')
+
+    private fun addSkyBonus(id: String, date: LocalDate) {
+        val set = skyBonusSet()
+        set.add("$id@${date.format(dateFmt)}")
+        prefs.edit().putStringSet("sky_bonus", set).apply()
+    }
+
+    private var skyFetching = false
+
+    /**
+     * Refresh the forecast when the cache is stale. Fail-soft at every
+     * step: no permission, no last-known location, no network — the sky
+     * card just stays away and the app is exactly as it was.
+     */
+    private fun maybeFetchSky() {
+        if (!skyPermissionGranted() || skyFetching) return
+        val today = LocalDate.now()
+        if (SkyWeather.isFresh(prefs, today)) return
+        val lm = getSystemService(LOCATION_SERVICE) as? android.location.LocationManager ?: return
+        val loc = runCatching {
+            lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+                ?: lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+        }.getOrNull() ?: return
+        skyFetching = true
+        hcScope.launch {
+            val sky = withContext(Dispatchers.IO) {
+                SkyWeather.fetch(loc.latitude, loc.longitude)
+            }
+            skyFetching = false
+            if (sky != null) {
+                SkyWeather.writeCache(prefs, today, sky)
+                if (mainShown && currentTab == 0) showScreen(0)
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQ_SKY) return
+        if (grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            maybeFetchSky()
+        } else {
+            Toast.makeText(this, "天気はお休みでいくね", Toast.LENGTH_SHORT).show()
+        }
+        if (mainShown) showScreen(currentTab)
     }
 
     /** v0.7.0: the old auto-picks survive only as an upgrader's first set. */
@@ -738,6 +812,8 @@ class MainActivity : Activity() {
     private companion object {
         const val OB_TOTAL = 11
         const val REQ_HC_PERMISSIONS = 4110
+        /** v0.13.0: request code for the coarse-location (sky) permission. */
+        const val REQ_SKY = 7013
     }
 
     private fun showOnboarding() {
@@ -1212,13 +1288,19 @@ class MainActivity : Activity() {
 
             val dow = "月火水木金土日"[today.dayOfWeek.value - 1]
             page.addView(label("${today.monthValue}月${today.dayOfMonth}日（$dow）・昨日より少し好きになる", 13f, paleBlue), fullLp(8))
+
+            // v0.13.0: 今日の空 — the day's reason arrives from outside.
+            skyCard(today, setIds)?.let { page.addView(it, fullLp(12)) }
+
             page.addView(headingWithIcon("マイチャレンジ", "ui_target", 0xFF7043))
 
             // v0.7.0: the score is the day's headline number — total so
             // far, plus what today has earned up to now.
             val earnedToday = MigakeruLogic.dayEarned(
                 setIds, items.filter { isDone(it.id, today) }.map { it.id }.toSet(),
-            )
+            ) + (skyBonusFor(today)
+                ?.takeIf { isDone(it, today) }
+                ?.let { MigakeruLogic.pointsOf(it) } ?: 0)
             val scoreCard = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -1399,6 +1481,63 @@ class MainActivity : Activity() {
                 page.addView(row, fullLp(16))
             }
 
+            // v0.13.0: the sky bonus row — same tap-to-complete feel as
+            // the set, but it lives outside the set: no slot, no settle
+            // miss, and its points ride along when it is done.
+            val bonusItem = skyBonusFor(today)?.let { MigakeruLogic.itemById(it) }
+            if (bonusItem != null) {
+                val done = isDone(bonusItem.id, today)
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    background = card(done)
+                    setPadding(dp(16), dp(16), dp(16), dp(16))
+                    contentDescription = if (done) "完了：${bonusItem.label}" else "未完了：${bonusItem.label}"
+                }
+                val mark = TextView(this).apply {
+                    text = if (done) "✓" else ""
+                    textSize = 15f
+                    gravity = Gravity.CENTER
+                    setTextColor(white)
+                    if (done) typeface = Typeface.DEFAULT_BOLD
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        if (done) setColor(orange) else setStroke(dp(2), Color.argb(170, 0xD4, 0xAF, 0x37))
+                    }
+                    layoutParams = LinearLayout.LayoutParams(dp(32), dp(32))
+                }
+                row.addView(mark)
+                val icon = ChallengeIconView(this, bonusItem.id, MigakeruLogic.colorOf(bonusItem.id))
+                icon.layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply {
+                    setMargins(dp(10), 0, 0, 0)
+                }
+                row.addView(icon)
+                val texts = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dp(12), 0, 0, 0)
+                }
+                val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                chipRow.addView(pillarChip(bonusItem.pillar))
+                chipRow.addView(label("　空のおすすめ", 12f, goldText, bold = true))
+                chipRow.addView(label("　${MigakeruLogic.pointsOf(bonusItem.id)} pt", 13f, goldText, bold = true))
+                texts.addView(chipRow)
+                texts.addView(label(bonusItem.label, 17f, if (done) subOnGlass else ink, bold = true))
+                row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                pressable(row)
+                row.setOnClickListener {
+                    val wasDone = isDone(bonusItem.id, today)
+                    setDone(bonusItem.id, today, !wasDone)
+                    if (wasDone) {
+                        Toast.makeText(this, "「${bonusItem.label}」の完了を取り消したよ", Toast.LENGTH_SHORT).show()
+                    } else {
+                        haptic(row, true)
+                        Toast.makeText(this, "空のおすすめ、できたね", Toast.LENGTH_SHORT).show()
+                    }
+                    showScreen(0)
+                }
+                page.addView(row, fullLp(16))
+            }
+
             // v0.7.0: a freshly unlocked slot is celebrated here, with the
             // way into the catalog one tap away.
             if (prefs.getBoolean("ch_unlock_pending", false)) {
@@ -1439,6 +1578,111 @@ class MainActivity : Activity() {
             footerRow.addView(footerLabel)
             page.addView(footerRow, fullLp(24))
         }
+    }
+
+    /**
+     * v0.13.0: the 今日の空 card. Three quiet states:
+     * - no permission yet: a one-time invitation (dismissible);
+     * - permission but no fresh cache: nothing (the fetch is silent);
+     * - facts in hand: the weather, one quiet line, and — when the pool
+     *   has someone outside the user's set — one tappable pick.
+     * The user's own set is never touched by this card.
+     */
+    private fun skyCard(today: LocalDate, setIds: List<String>): View? {
+        if (!skyPermissionGranted()) {
+            if (prefs.getBoolean("sky_invite_off", false)) return null
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = card()
+                setPadding(dp(16), dp(14), dp(16), dp(14))
+            }
+            val head = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            head.addView(
+                ChallengeIconView(this, "sky", 0xFFC107),
+                LinearLayout.LayoutParams(dp(30), dp(30)),
+            )
+            val title = label("今日の空", 16f, ink, bold = true)
+            title.setPadding(dp(10), 0, 0, 0)
+            head.addView(title)
+            box.addView(head)
+            val inviteLp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(6) }
+            box.addView(
+                label("天気に合うチャレンジを、毎朝1つだけ置けるよ。", 14f, subOnGlass),
+                inviteLp,
+            )
+            val btnLp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(10) }
+            box.addView(primaryButton("天気を使う") {
+                requestPermissions(
+                    arrayOf(android.Manifest.permission.ACCESS_COARSE_LOCATION),
+                    REQ_SKY,
+                )
+            }, btnLp)
+            box.addView(ghostButton("今はいい") {
+                prefs.edit().putBoolean("sky_invite_off", true).apply()
+                showScreen(0)
+            }, btnLp)
+            return box
+        }
+
+        val cached = SkyWeather.readCache(prefs)
+        if (cached == null || cached.first != today) return null
+        val sky = cached.second
+        val kind = MigakeruLogic.skyKind(sky)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = card()
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+        }
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        head.addView(
+            ChallengeIconView(this, "sky", 0xFFC107),
+            LinearLayout.LayoutParams(dp(30), dp(30)),
+        )
+        val title = label("今日の空", 16f, ink, bold = true)
+        title.setPadding(dp(10), 0, 0, 0)
+        head.addView(title)
+        head.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        head.addView(label(MigakeruLogic.skyFactLine(sky), 15f, goldText, bold = true))
+        box.addView(head)
+
+        val last = lastActiveBefore(today)
+        val welcomeBack = last != null &&
+            java.time.temporal.ChronoUnit.DAYS.between(last, today) >= 3
+        val msgLp = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(6) }
+        box.addView(label(MigakeruLogic.skyMessage(kind, welcomeBack), 14f, subOnGlass), msgLp)
+
+        val bonus = skyBonusFor(today)
+        if (bonus != null) {
+            box.addView(
+                label("おすすめは、今日の分に入ってるよ。", 13f, paleBlue),
+                msgLp,
+            )
+        } else {
+            val pick = MigakeruLogic.skyPick(kind, today, setIds.toSet())
+            val pickItem = pick?.let { MigakeruLogic.itemById(it) }
+            if (pick != null && pickItem != null) {
+                val btnLp = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(10) }
+                box.addView(primaryButton("＋ ${pickItem.label} を今日の分に足す") {
+                    addSkyBonus(pick, today)
+                    showScreen(0)
+                }, btnLp)
+            }
+        }
+        return box
     }
 
     // ---------- チャレンジ（カタログ） ----------
