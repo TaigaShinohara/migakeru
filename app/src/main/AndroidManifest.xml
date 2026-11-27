@@ -9,6 +9,12 @@
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_MINDFULNESS" />
 
+    <!-- v0.13.0: 今日の空 — weather fetch (Open-Meteo) and the coarse
+         location that picks the forecast area. Location is optional:
+         without it the sky card simply never appears. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- Health Connect app visibility (pre-Android-14 availability checks). -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
