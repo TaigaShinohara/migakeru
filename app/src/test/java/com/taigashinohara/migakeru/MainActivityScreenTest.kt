@@ -250,8 +250,24 @@ class MainActivityScreenTest {
     fun meScreen_rendersNonBlank() {
         val activity = launch(obDone = true)
         clickTab(activity, "わたし")
-        assertNonBlank(activity, "卒業した習慣", "ポイント")
+        assertNonBlank(activity, "わたしの積み重ね", "卒業した習慣", "ポイント")
         shot(activity, "me")
+    }
+
+    /** v0.13.1: opening the app must land on the doing — the checklist
+     *  comes before the sky card and before the accumulation mountain
+     *  in the page's reading order. */
+    @Test
+    fun todayScreen_checklistBeforeSkyAndMountain() {
+        val activity = launch(obDone = true)
+        val found = texts(activity.window.decorView)
+        val listAt = found.indexOfFirst { it.contains("マイチャレンジ") }
+        val skyAt = found.indexOfFirst { it.contains("今日の空") }
+        val mountainAt = found.indexOfFirst { it.contains("わたしの積み重ね") }
+        assertTrue("checklist heading missing: $found", listAt >= 0)
+        assertTrue("sky card missing: $found", skyAt > listAt)
+        assertTrue("mountain must come after the checklist: $found", mountainAt > listAt)
+        shot(activity, "today")
     }
 
     /** v0.13.0: with the permission granted and a rainy cache seeded,

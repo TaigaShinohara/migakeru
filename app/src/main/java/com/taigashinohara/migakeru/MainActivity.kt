@@ -1289,9 +1289,6 @@ class MainActivity : Activity() {
             val dow = "月火水木金土日"[today.dayOfWeek.value - 1]
             page.addView(label("${today.monthValue}月${today.dayOfMonth}日（$dow）・昨日より少し好きになる", 13f, paleBlue), fullLp(8))
 
-            // v0.13.0: 今日の空 — the day's reason arrives from outside.
-            skyCard(today, setIds)?.let { page.addView(it, fullLp(12)) }
-
             page.addView(headingWithIcon("マイチャレンジ", "ui_target", 0xFF7043))
 
             // v0.7.0: the score is the day's headline number — total so
@@ -1318,61 +1315,6 @@ class MainActivity : Activity() {
             scoreCard.addView(label("${scoreTotal()} pt", 20f, ink, bold = true))
             scoreCard.addView(label("　今日 +$earnedToday pt", 15f, subOnGlass))
             page.addView(scoreCard, fullLp(12))
-
-            // v0.12.0: the accumulation card — open the app and see the
-            // mountain you have built. Pride first, recording second.
-            val doneAll = doneSet()
-            val accCard = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                background = card()
-                setPadding(dp(16), dp(12), dp(16), dp(12))
-            }
-            val accHead = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            accHead.addView(
-                ChallengeIconView(this, "chart", 0xFFC107),
-                LinearLayout.LayoutParams(dp(30), dp(30)),
-            )
-            val accTitle = label("わたしの積み重ね", 16f, ink, bold = true)
-            accTitle.setPadding(dp(10), 0, 0, 0)
-            accHead.addView(accTitle)
-            accCard.addView(accHead)
-            val accTotalLp = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(6) }
-            accCard.addView(
-                label("累計 ${doneAll.size} 回 ・ ${MigakeruLogic.earnedPoints(doneAll)} pt 分の「できた」", 15f, goldText, bold = true),
-                accTotalLp,
-            )
-            val accChartLp = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, dp(110),
-            ).apply { topMargin = dp(8) }
-            accCard.addView(
-                AccumulationChartView(
-                    this,
-                    MigakeruLogic.cumulativeSeries(doneAll, today, 30),
-                    MigakeruLogic.dailyCounts(doneAll, today, 14),
-                ),
-                accChartLp,
-            )
-            val accStreak = MigakeruLogic.currentStreak(doneAll, today)
-            val accCapLp = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(8) }
-            accCard.addView(
-                label(
-                    when {
-                        doneAll.isEmpty() -> "まだ0回。最初の一歩が、いちばん大きい。"
-                        accStreak >= 2 -> "$accStreak 日連続で積み重ね中。それ、すごいことだよ。"
-                        else -> "グラフは、続けた分だけ伸びていく。"
-                    },
-                    13f, paleBlue,
-                ),
-                accCapLp,
-            )
-            page.addView(accCard, fullLp(12))
 
             // K4: minimal first-run intro (one card, dismissed once, no wizard).
             if (!prefs.getBoolean("intro_done", false)) {
@@ -1558,6 +1500,13 @@ class MainActivity : Activity() {
                 page.addView(ghostButton("チャレンジを選ぶ・変える") { showScreen(4) }, fullLp(16))
             }
 
+            // v0.13.1: the sky and the mountain live below the list.
+            // The concept, in order: (1) what there is to DO today,
+            // (2) the reason the outside world brought, (3) the pride
+            // of what has piled up. Opening the app lands on the doing.
+            skyCard(today, setIds)?.let { page.addView(it, fullLp(16)) }
+            page.addView(accumulationCard(today), fullLp(16))
+
             val streak = unlockStreak()
             val footer = when {
                 items.isEmpty() -> "まずはチャレンジを選ぼう。"
@@ -1578,6 +1527,66 @@ class MainActivity : Activity() {
             footerRow.addView(footerLabel)
             page.addView(footerRow, fullLp(24))
         }
+    }
+
+    /**
+     * v0.12.0: the accumulation card — the gold mountain of everything
+     * done so far. Pride first, recording second. Shown low on 今日
+     * (below the doing) and as the hero of わたし (tall).
+     */
+    private fun accumulationCard(today: LocalDate, tall: Boolean = false): View {
+        val doneAll = doneSet()
+        val accCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = card()
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+        }
+        val accHead = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        accHead.addView(
+            ChallengeIconView(this, "chart", 0xFFC107),
+            LinearLayout.LayoutParams(dp(30), dp(30)),
+        )
+        val accTitle = label("わたしの積み重ね", 16f, ink, bold = true)
+        accTitle.setPadding(dp(10), 0, 0, 0)
+        accHead.addView(accTitle)
+        accCard.addView(accHead)
+        val accTotalLp = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(6) }
+        accCard.addView(
+            label("累計 ${doneAll.size} 回 ・ ${MigakeruLogic.earnedPoints(doneAll)} pt 分の「できた」", 15f, goldText, bold = true),
+            accTotalLp,
+        )
+        val accChartLp = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(if (tall) 150 else 110),
+        ).apply { topMargin = dp(8) }
+        accCard.addView(
+            AccumulationChartView(
+                this,
+                MigakeruLogic.cumulativeSeries(doneAll, today, 30),
+                MigakeruLogic.dailyCounts(doneAll, today, 14),
+            ),
+            accChartLp,
+        )
+        val accStreak = MigakeruLogic.currentStreak(doneAll, today)
+        val accCapLp = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(8) }
+        accCard.addView(
+            label(
+                when {
+                    doneAll.isEmpty() -> "まだ0回。最初の一歩が、いちばん大きい。"
+                    accStreak >= 2 -> "$accStreak 日連続で積み重ね中。それ、すごいことだよ。"
+                    else -> "グラフは、続けた分だけ伸びていく。"
+                },
+                13f, paleBlue,
+            ),
+            accCapLp,
+        )
+        return accCard
     }
 
     /**
@@ -1615,19 +1624,28 @@ class MainActivity : Activity() {
                 label("天気に合うチャレンジを、毎朝1つだけ置けるよ。", 14f, subOnGlass),
                 inviteLp,
             )
-            val btnLp = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { topMargin = dp(10) }
-            box.addView(primaryButton("天気を使う") {
+            // v0.13.1: the invitation stays slim — two small buttons
+            // side by side, never a wall between the user and the day.
+            val btnRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+            }
+            val halfLp = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            val halfLpR = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { setMargins(dp(10), 0, 0, 0) }
+            btnRow.addView(primaryButton("天気を使う") {
                 requestPermissions(
                     arrayOf(android.Manifest.permission.ACCESS_COARSE_LOCATION),
                     REQ_SKY,
                 )
-            }, btnLp)
-            box.addView(ghostButton("今はいい") {
+            }, halfLp)
+            btnRow.addView(ghostButton("今はいい") {
                 prefs.edit().putBoolean("sky_invite_off", true).apply()
                 showScreen(0)
-            }, btnLp)
+            }, halfLpR)
+            val btnRowLp = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(10) }
+            box.addView(btnRow, btnRowLp)
             return box
         }
 
@@ -2175,6 +2193,9 @@ class MainActivity : Activity() {
 
     private fun meScreen(): ScrollView = scrollPage { page ->
         page.addView(headingWithIcon("わたし", "posture", 0xEC407A))
+        // v0.13.1: this page exists to FEEL the accumulation — the
+        // mountain leads at full height, the numbers follow under it.
+        page.addView(accumulationCard(LocalDate.now(), tall = true), fullLp(12))
         // v0.7.0: points headline the page; the counts sit under it.
         // v0.8.0: the three stats become icon rows in one card.
         val stats = LinearLayout(this).apply {
@@ -2195,7 +2216,14 @@ class MainActivity : Activity() {
             stats.addView(r)
         }
         statRow("ui_coin", 0xFFC107, "ポイント：${scoreTotal()} pt", bold = true)
-        statRow("stairs", MigakeruLogic.colorOf("stairs"), "これまでの積み重ね：${doneSet().size} 個", bold = false)
+        // v0.13.1: the totals live in the mountain above; this row is
+        // the streak instead of a second copy of the same number.
+        val meStreak = MigakeruLogic.currentStreak(doneSet(), LocalDate.now())
+        statRow(
+            "stairs", MigakeruLogic.colorOf("stairs"),
+            if (meStreak >= 1) "いまの連続：$meStreak 日" else "いまの連続：まだ（今日から）",
+            bold = false,
+        )
         statRow("decide", MigakeruLogic.colorOf("decide"), "チャレンジ枠：${slotCount()}（セット中 ${challengeSet().size}）", bold = false)
         page.addView(stats, fullLp(12))
 
