@@ -643,20 +643,26 @@ class MainActivity : Activity() {
 
     // ---------- shared UI helpers ----------
 
-    /** Reading glass, dark side (v0.5.0): white 14% -> 10%, gold edge 40%. */
+    /**
+     * Reading glass, dark side. v0.14.0 (Simple Glass pass): aligned
+     * to the canonical dark reading-glass gradient, white 19% -> 13%
+     * (was 14% -> 10%, thinner than the standard and harder to read
+     * over the background glow). Gold edge stays — it is this app's
+     * art-direction language, not the generic white highlight.
+     */
     private fun card(done: Boolean = false): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
-        if (done) intArrayOf(Color.argb(48, 0xFF, 0xED, 0xD9), Color.argb(36, 0xFF, 0xE2, 0xC4))
-        else intArrayOf(Color.argb(36, 255, 255, 255), Color.argb(26, 255, 255, 255)),
+        if (done) intArrayOf(Color.argb(56, 0xFF, 0xED, 0xD9), Color.argb(42, 0xFF, 0xE2, 0xC4))
+        else intArrayOf(Color.argb(48, 255, 255, 255), Color.argb(33, 255, 255, 255)),
     ).apply {
         cornerRadius = dp(24).toFloat()
         setStroke(dp(1), Color.argb(if (done) 150 else 102, 0xD4, 0xAF, 0x37))
     }
 
-    /** Input surface, dark glass; focus edge is set by the caller. */
+    /** Input surface, dark glass (canonical input face 22% -> 18%); focus edge is set by the caller. */
     private fun inputSurface(focused: Boolean): GradientDrawable = GradientDrawable(
         GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Color.argb(36, 255, 255, 255), Color.argb(26, 255, 255, 255)),
+        intArrayOf(Color.argb(56, 255, 255, 255), Color.argb(46, 255, 255, 255)),
     ).apply {
         cornerRadius = dp(24).toFloat()
         if (focused) setStroke(dp(2), orange) else setStroke(dp(1), Color.argb(90, 255, 255, 255))
@@ -1312,7 +1318,7 @@ class MainActivity : Activity() {
             scoreLabel.setPadding(dp(10), 0, 0, 0)
             scoreCard.addView(scoreLabel)
             scoreCard.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            scoreCard.addView(label("${scoreTotal()} pt", 20f, ink, bold = true))
+            scoreCard.addView(label("${scoreTotal()} pt", 26f, ink, bold = true))
             scoreCard.addView(label("　今日 +$earnedToday pt", 15f, subOnGlass))
             page.addView(scoreCard, fullLp(12))
 
@@ -1386,7 +1392,7 @@ class MainActivity : Activity() {
                 chipRow.addView(pillarChip(item.pillar))
                 chipRow.addView(label("　${MigakeruLogic.pointsOf(item.id)} pt", 13f, goldText, bold = true))
                 if (done && isAutoDone(item.id, today)) {
-                    chipRow.addView(label("　⌚ 自動チェック", 12f, subOnGlass))
+                    chipRow.addView(label("　⌚ 自動チェック", 13f, subOnGlass))
                 }
                 texts.addView(chipRow)
                 texts.addView(label(item.label, 17f, if (done) subOnGlass else ink, bold = true))
@@ -1460,7 +1466,7 @@ class MainActivity : Activity() {
                 }
                 val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 chipRow.addView(pillarChip(bonusItem.pillar))
-                chipRow.addView(label("　空のおすすめ", 12f, goldText, bold = true))
+                chipRow.addView(label("　空のおすすめ", 13f, goldText, bold = true))
                 chipRow.addView(label("　${MigakeruLogic.pointsOf(bonusItem.id)} pt", 13f, goldText, bold = true))
                 texts.addView(chipRow)
                 texts.addView(label(bonusItem.label, 17f, if (done) subOnGlass else ink, bold = true))
@@ -1500,39 +1506,51 @@ class MainActivity : Activity() {
                 page.addView(ghostButton("チャレンジを選ぶ・変える") { showScreen(4) }, fullLp(16))
             }
 
-            // v0.13.1: the sky and the mountain live below the list.
-            // The concept, in order: (1) what there is to DO today,
-            // (2) the reason the outside world brought, (3) the pride
-            // of what has piled up. Opening the app lands on the doing.
+            // v0.13.1: the sky lives below the list — (1) what there
+            // is to DO today, (2) the reason the outside world brought.
             skyCard(today, setIds)?.let { page.addView(it, fullLp(16)) }
-            page.addView(accumulationCard(today), fullLp(16))
 
-            val streak = unlockStreak()
-            val footer = when {
-                items.isEmpty() -> "まずはチャレンジを選ぼう。"
-                doneToday == items.size -> "今日はもう十分。よく整えたね。"
-                slotCount() >= MigakeruLogic.MAX_SLOTS -> "枠は最大。あとは回すだけ。"
-                streak == MigakeruLogic.UNLOCK_STREAK_DAYS - 1 -> "あと1日、全部できたら枠が増える。"
-                streak > 0 -> "全部できた日が ${streak} 日つづいてる。"
-                doneToday == 0 -> "タップで完了。それだけ。"
-                else -> "あと ${items.size - doneToday} つ。急がなくていい。"
-            }
-            val footerRow = LinearLayout(this).apply {
+            // v0.14.0 (minimal pass): the mountain itself lives on
+            // わたし — one home for the same information. Today keeps
+            // a one-line pride strip (a glance; tap opens わたし).
+            // The old footer line is gone too: the buddy bubble at
+            // the top already speaks for this screen, and two voices
+            // saying similar things is duplication, not warmth.
+            val stripDone = doneSet()
+            val stripTotal = stripDone.size
+            val stripEarned = MigakeruLogic.earnedPoints(stripDone)
+            val strip = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
+                background = card()
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+                contentDescription = "わたしの積み重ねを開く"
             }
-            footerRow.addView(FlameFaceView(this), LinearLayout.LayoutParams(dp(26), dp(26)))
-            val footerLabel = label(footer, 15f, white)
-            footerLabel.setPadding(dp(8), 0, 0, 0)
-            footerRow.addView(footerLabel)
-            page.addView(footerRow, fullLp(24))
+            strip.addView(
+                ChallengeIconView(this, "chart", 0xFFC107),
+                LinearLayout.LayoutParams(dp(26), dp(26)),
+            )
+            val stripText = if (stripTotal > 0) {
+                "累計 $stripTotal 回 ・ $stripEarned pt 分の「できた」"
+            } else {
+                "積み重ねは、ここから。"
+            }
+            val stripLabel = label(stripText, 15f, ink, bold = true)
+            stripLabel.setPadding(dp(10), 0, 0, 0)
+            strip.addView(stripLabel)
+            strip.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+            strip.addView(label("わたし ›", 13f, subOnGlass))
+            pressable(strip)
+            strip.setOnClickListener { showScreen(3) }
+            page.addView(strip, fullLp(16))
         }
     }
 
     /**
      * v0.12.0: the accumulation card — the gold mountain of everything
-     * done so far. Pride first, recording second. Shown low on 今日
-     * (below the doing) and as the hero of わたし (tall).
+     * done so far. Pride first, recording second. Since v0.14.0 it
+     * lives only on わたし, as that screen's hero (tall); 今日 keeps
+     * a one-line strip that opens it.
      */
     private fun accumulationCard(today: LocalDate, tall: Boolean = false): View {
         val doneAll = doneSet()
@@ -1549,7 +1567,7 @@ class MainActivity : Activity() {
             ChallengeIconView(this, "chart", 0xFFC107),
             LinearLayout.LayoutParams(dp(30), dp(30)),
         )
-        val accTitle = label("わたしの積み重ね", 16f, ink, bold = true)
+        val accTitle = label("わたしの積み重ね", 17f, ink, bold = true)
         accTitle.setPadding(dp(10), 0, 0, 0)
         accHead.addView(accTitle)
         accCard.addView(accHead)
@@ -1613,7 +1631,7 @@ class MainActivity : Activity() {
                 ChallengeIconView(this, "sky", 0xFFC107),
                 LinearLayout.LayoutParams(dp(30), dp(30)),
             )
-            val title = label("今日の空", 16f, ink, bold = true)
+            val title = label("今日の空", 17f, ink, bold = true)
             title.setPadding(dp(10), 0, 0, 0)
             head.addView(title)
             box.addView(head)
@@ -1621,7 +1639,7 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { topMargin = dp(6) }
             box.addView(
-                label("天気に合うチャレンジを、毎朝1つだけ置けるよ。", 14f, subOnGlass),
+                label("天気に合うチャレンジを、毎朝1つだけ置けるよ。", 13f, subOnGlass),
                 inviteLp,
             )
             // v0.13.1: the invitation stays slim — two small buttons
@@ -1666,7 +1684,7 @@ class MainActivity : Activity() {
             ChallengeIconView(this, "sky", 0xFFC107),
             LinearLayout.LayoutParams(dp(30), dp(30)),
         )
-        val title = label("今日の空", 16f, ink, bold = true)
+        val title = label("今日の空", 17f, ink, bold = true)
         title.setPadding(dp(10), 0, 0, 0)
         head.addView(title)
         head.addView(View(this), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -1679,7 +1697,7 @@ class MainActivity : Activity() {
         val msgLp = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = dp(6) }
-        box.addView(label(MigakeruLogic.skyMessage(kind, welcomeBack), 14f, subOnGlass), msgLp)
+        box.addView(label(MigakeruLogic.skyMessage(kind, welcomeBack), 13f, subOnGlass), msgLp)
 
         val bonus = skyBonusFor(today)
         if (bonus != null) {
@@ -1719,10 +1737,10 @@ class MainActivity : Activity() {
             page.addView(ghostButton("‹ 今日にもどる") { showScreen(0) })
             page.addView(headingWithIcon("チャレンジ", "ui_sparkle", 0xFFCA28), fullLp(16))
             page.addView(label("セット中 ${setIds.size} / 枠 $slots", 17f, white, bold = true), fullLp(8))
-            page.addView(
-                label("難しいチャレンジほど高ポイント。できなかった日は、1つにつき −1 pt。全部続けられたら枠が増える。", 13f, paleBlue),
-                fullLp(4),
-            )
+            // v0.14.0 (minimal pass): the scoring rules paragraph is
+            // gone — onboarding and the today intro card already teach
+            // them, and every card shows its own points. Saying it a
+            // third time here is duplication, not guidance.
             // v0.10.0: genre shelves — chips switch the catalog between
             // the pillar view (ぜんぶ) and one cross-cutting genre.
             page.addView(genreChipRow(), fullLp(14))
@@ -1798,7 +1816,7 @@ class MainActivity : Activity() {
             val selected = current == id
             val tv = TextView(this).apply {
                 text = title
-                textSize = 13.5f
+                textSize = 13f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(if (selected) goldDark else ink)
                 background = GradientDrawable().apply {
@@ -1884,7 +1902,7 @@ class MainActivity : Activity() {
         // mid-glyph on devices with a larger font size — text is sp and
         // grows, dp heights do not. Minimum heights keep the tidy look
         // at the standard font size and grow when the text needs room.
-        val name = label(item.label, 16f, ink, bold = true)
+        val name = label(item.label, 17f, ink, bold = true)
         name.gravity = Gravity.CENTER_VERTICAL
         name.minimumHeight = dp(58)
         cardView.addView(name, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -1911,7 +1929,9 @@ class MainActivity : Activity() {
             .plusWeeks(weekOffset.toLong())
         return scrollPage { page ->
             page.addView(headingWithIcon("鏡タイム", "ui_mirror", 0x4FC3F7))
-            page.addView(label("積み重ねは、連続じゃなく「量」で見える。", 13f, paleBlue))
+            // v0.14.0 (minimal pass): the slogan line under the heading
+            // is gone — the week card itself shows the 量, and the line
+            // only repeated the concept on every visit.
 
             // K3: week navigation (past weeks stay reachable, future locked).
             val nav = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -2127,7 +2147,9 @@ class MainActivity : Activity() {
 
     private fun guideScreen(): ScrollView = scrollPage { page ->
         page.addView(headingWithIcon("整え図鑑", "journal", 0x66BB6A))
-        page.addView(label("チャレンジの「やり方」を書いた辞書。やり方に迷ったときに開く場所。気になったら、その場でチャレンジにセットできる。", 13f, paleBlue))
+        // v0.14.0 (minimal pass): the two-sentence explainer under the
+        // heading is gone — the shelf explains itself, and the text
+        // repeated on every visit what the first visit taught.
         // v0.11.2: grouped by pillar (からだ／みため／こころ) — the same
         // order as everywhere else, so a page is findable at a glance.
         for (pillar in listOf(Item.KARADA, Item.MITAME, Item.KOKORO)) {

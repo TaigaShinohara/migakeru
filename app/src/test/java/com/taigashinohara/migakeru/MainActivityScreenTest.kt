@@ -144,11 +144,13 @@ class MainActivityScreenTest {
         assertNonBlank(activity, "マイチャレンジ", "からだ", "ポイント")
     }
 
-    /** v0.12.0: the accumulation card greets with the running total.
-     *  Dates are seeded relative to the real today: java.time reads the
-     *  wall clock under Robolectric, not the pinned scheduler. */
+    /** v0.12.0: the accumulation greets with the running total.
+     *  v0.14.0: on 今日 it is a one-line pride strip (the mountain
+     *  itself lives on わたし). Dates are seeded relative to the real
+     *  today: java.time reads the wall clock under Robolectric, not
+     *  the pinned scheduler. */
     @Test
-    fun todayScreen_showsAccumulation() {
+    fun todayScreen_showsPrideStrip() {
         val today = java.time.LocalDate.now()
         fun key(id: String, d: java.time.LocalDate) = "$id@$d"
         RuntimeEnvironment.getApplication()
@@ -164,7 +166,7 @@ class MainActivityScreenTest {
             )
             .apply()
         val activity = launch(obDone = true)
-        assertNonBlank(activity, "わたしの積み重ね", "累計 3 回", "2 日連続で積み重ね中")
+        assertNonBlank(activity, "累計 3 回", "できた")
     }
 
     @Test
@@ -255,18 +257,19 @@ class MainActivityScreenTest {
     }
 
     /** v0.13.1: opening the app must land on the doing — the checklist
-     *  comes before the sky card and before the accumulation mountain
-     *  in the page's reading order. */
+     *  comes first in the page's reading order. v0.14.0: the sky card
+     *  follows it, then the one-line pride strip (the mountain itself
+     *  moved to わたし). */
     @Test
-    fun todayScreen_checklistBeforeSkyAndMountain() {
+    fun todayScreen_checklistFirstSkyThenStrip() {
         val activity = launch(obDone = true)
         val found = texts(activity.window.decorView)
         val listAt = found.indexOfFirst { it.contains("マイチャレンジ") }
         val skyAt = found.indexOfFirst { it.contains("今日の空") }
-        val mountainAt = found.indexOfFirst { it.contains("わたしの積み重ね") }
+        val stripAt = found.indexOfFirst { it.contains("積み重ねは、ここから") || it.contains("累計") }
         assertTrue("checklist heading missing: $found", listAt >= 0)
         assertTrue("sky card missing: $found", skyAt > listAt)
-        assertTrue("mountain must come after the checklist: $found", mountainAt > listAt)
+        assertTrue("pride strip must close the page: $found", stripAt > skyAt)
         shot(activity, "today")
     }
 
